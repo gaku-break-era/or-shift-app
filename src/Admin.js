@@ -6,7 +6,7 @@ import { collection, getDocs, setDoc, doc, getDoc } from "firebase/firestore";
 import { saveAs } from "file-saver";
 import emailjs from "@emailjs/browser";
 import { isWeekend } from "date-fns";
-
+import FeedbackForm from "./FeedbackForm";
 
 
 
@@ -21,6 +21,8 @@ function Admin() {
   const [currentUser, setCurrentUser] = useState(null);
   const [staffList, setStaffList] = useState([]);
   const [unsubmitted, setUnsubmitted] = useState([]);
+  const [showFeedback, setShowFeedback] = useState(false);
+
 
    // 👇ここに貼る！！
    const EMAIL_SERVICE_ID = "service_12m5w0v";
@@ -393,6 +395,15 @@ setEvents(eventMap);
           ))}
         </tbody>
       </table>
+
+      
+{showFeedback ? (
+  <FeedbackForm onClose={() => setShowFeedback(false)} />
+) : (
+  <button onClick={() => setShowFeedback(true)} style={{ marginTop: "2rem" }}>
+    改善提案を送る
+  </button>
+)}
     </div>
   );
 }
