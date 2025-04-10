@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import { db } from "./firebase";
-import { collection, addDoc, Timestamp } from "firebase/firestore";
+import { collection, setDoc, doc, Timestamp } from "firebase/firestore";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "firebase/auth";
 import Admin from "./Admin";
 import AdminEvents from "./AdminEvents";
@@ -93,12 +93,22 @@ function MainForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+  
     if (!user) {
       alert("ログインしてください！");
       return;
     }
-
+  
+    // 送信年月（来月）
+    const today = new Date();
+    let year = today.getFullYear();
+    let month = today.getMonth() + 2;
+    if (month === 13) {
+      month = 1;
+      year++;
+    }
+    const docId = `${user.displayName || user.email}_${year}${String(month).padStart(2, "0")}`;
+  
     try {
       const dataToSend = {
         name: user.displayName || "",
@@ -109,14 +119,15 @@ function MainForm() {
           selection: item.selection,
         })),
       };
-
-      await addDoc(collection(db, "shiftRequests"), dataToSend);
-      setSubmitStatus("送信が完了しました！おつかれさまです！");
+  
+      await setDoc(doc(db, "shiftRequests", docId), dataToSend); // ← ここで上書き保存
+      setSubmitStatus("送信が完了しました！おつかれさまです！（2回目以降は上書きされます）");
     } catch (error) {
       console.error("送信エラー:", error);
       setSubmitStatus("送信に失敗しました。もう一度お試しください。");
     }
   };
+  
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
