@@ -1,0 +1,31 @@
+[
+    {
+      "date": "2025-04-15",
+      "room": "OR1",
+      "department": "消化器外科",
+      "procedure": "腹腔鏡下胆嚢摘出術",
+      "startTime": "09:00",
+      "endTime": "10:30",
+      "leadSurgeon": "佐藤医師",
+      "assistantSurgeon": "なし",
+      "asaScore": 2,
+      "severity": "中等度",
+      "isVIP": false,
+      "specialNotes": "新機材の試用"
+    },
+    {
+      "date": "2025-04-15",
+      "room": "OR2",
+      "department": "脳神経外科",
+      "procedure": "慢性硬膜下血腫穿頭洗浄術",
+      "startTime": "10:30",
+      "endTime": "12:00",
+      "leadSurgeon": "田中医師",
+      "assistantSurgeon": "山本医師",
+      "asaScore": 3,
+      "severity": "重度",
+      "isVIP": true,
+      "specialNotes": ""
+    }
+  ]
+  

@@ -1,0 +1,48 @@
+[
+    {
+      "id": "surgery1",
+      "date": "2025-04-13",
+      "department": "消化器外科",
+      "procedure": "腹腔鏡下胆嚢摘出術",
+      "orNumber": "OR6",
+      "startTime": "09:00",
+      "endTime": "10:30",
+      "leadSurgeon": "Dr. 佐藤",
+      "assistantSurgeon": "Dr. 鈴木",
+      "asaScore": 2,
+      "severity": "中等度",
+      "vip": false,
+      "specialConsiderations": ["初回使用機材あり"]
+    },
+    {
+      "id": "surgery2",
+      "date": "2025-04-13",
+      "department": "消化器外科",
+      "procedure": "虫垂切除術",
+      "orNumber": "OR6",
+      "startTime": "11:00",
+      "endTime": "12:00",
+      "leadSurgeon": "Dr. 山田",
+      "assistantSurgeon": "Dr. 加藤",
+      "asaScore": 1,
+      "severity": "軽度",
+      "vip": false,
+      "specialConsiderations": []
+    },
+    {
+      "id": "surgery3",
+      "date": "2025-04-13",
+      "department": "泌尿器科",
+      "procedure": "経尿道的膀胱腫瘍切除術",
+      "orNumber": "OR9",
+      "startTime": "13:00",
+      "endTime": "14:00",
+      "leadSurgeon": "Dr. 伊藤",
+      "assistantSurgeon": "Dr. 斎藤",
+      "asaScore": 3,
+      "severity": "重度",
+      "vip": true,
+      "specialConsiderations": ["公開手術", "新術式"]
+    }
+  ]
+  
