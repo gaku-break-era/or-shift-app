@@ -21,20 +21,19 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
-        <Route path="/login" element={<LoginPage />} /> 
-        <Route path="/form" element={<MainForm />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/admin-events" element={<AdminEvents />} />
-        <Route path="/admin-events-list" element={<AdminEventList />} />
-        <Route path="/home" element={<StaffHome />} />
-        <Route path="/assignments" element={<WeeklyAssignments />} />
-        <Route path="/procedures" element={<ProcedureList />} />
-        <Route path="/procedures/:id" element={<ProcedureDetail />} />
-        <Route path="/auto-assignment" element={<AutoAssignmentScreen />} />
-         <Route path="/daily-assignment" element={<DailyAssignmentScreen />} />
-         
-      </Routes>
+  <Route path="/" element={<LoginPage />} />
+  <Route path="/form" element={<MainForm />} />
+  <Route path="/admin" element={<Admin />} />
+  <Route path="/admin-events" element={<AdminEvents />} />
+  <Route path="/admin-events-list" element={<AdminEventList />} />
+  <Route path="/home" element={<StaffHome />} />
+  <Route path="/assignments" element={<WeeklyAssignments />} />
+  <Route path="/procedures" element={<ProcedureList />} />
+  <Route path="/procedures/:id" element={<ProcedureDetail />} />
+  <Route path="/auto-assignment" element={<AutoAssignmentScreen />} />
+  <Route path="/daily-assignment" element={<DailyAssignmentScreen />} />
+</Routes>
+
     </Router>
   );
 }
