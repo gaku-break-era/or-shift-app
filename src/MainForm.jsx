@@ -1,9 +1,9 @@
 // src/MainForm.jsx
 import React, { useState, useEffect } from "react";
-import { getAuth, onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 function MainForm() {
   const MAX_OFF_DAYS = 3;
@@ -13,13 +13,18 @@ function MainForm() {
   const [submitStatus, setSubmitStatus] = useState("");
   const [user, setUser] = useState(null);
   const auth = getAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        navigate("/login"); // ログインしていなければ /login に飛ばす
+      }
     });
     return () => unsubscribe();
-  }, [auth]);
+  }, [auth, navigate]);
 
   useEffect(() => {
     const today = new Date();
@@ -88,13 +93,12 @@ function MainForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-  
+
     if (!user) {
       alert("ログインしてください！");
       return;
     }
-  
-    // 送信年月（来月）
+
     const today = new Date();
     let year = today.getFullYear();
     let month = today.getMonth() + 2;
@@ -103,7 +107,7 @@ function MainForm() {
       year++;
     }
     const docId = `${user.displayName || user.email}_${year}${String(month).padStart(2, "0")}`;
-  
+
     try {
       const dataToSend = {
         name: user.displayName || "",
@@ -114,22 +118,12 @@ function MainForm() {
           selection: item.selection,
         })),
       };
-  
-      await setDoc(doc(db, "shiftRequests", docId), dataToSend); // ← ここで上書き保存
-      setSubmitStatus("送信が完了しました！おつかれさまです！（2回目以降は上書きされます）");
+
+      await setDoc(doc(db, "shiftRequests", docId), dataToSend);
+      setSubmitStatus("送信が完了しました！（2回目以降は上書きされます）");
     } catch (error) {
       console.error("送信エラー:", error);
       setSubmitStatus("送信に失敗しました。もう一度お試しください。");
-    }
-  };
-  
-
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("ログインエラー:", error);
     }
   };
 
@@ -140,74 +134,64 @@ function MainForm() {
   return (
     <div style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: 600, margin: "auto" }}>
       <h1>シフト希望フォーム</h1>
+      <p>ログイン中：{user?.displayName || user?.email}</p>
+      <button onClick={handleLogout}>ログアウト</button>
 
-      {!user ? (
-        <div>
-          <p>Googleアカウントでログインしてください</p>
-          <button onClick={handleLogin}>ログイン</button>
-        </div>
-      ) : (
-        <div>
-          <p>ログイン中：{user.displayName || user.email}</p>
-          <button onClick={handleLogout}>ログアウト</button>
+      <p style={{ fontSize: "14px", color: "gray", marginTop: "1rem" }}>
+        ※休み希望（夜勤含む）は最大 {MAX_OFF_DAYS} 日、夜勤希望は {MAX_NIGHT_SHIFTS} 回までです
+      </p>
 
-          <p style={{ fontSize: "14px", color: "gray", marginTop: "1rem" }}>
-            ※休み希望（夜勤含む）は最大 {MAX_OFF_DAYS} 日、夜勤希望は {MAX_NIGHT_SHIFTS} 回までです
-          </p>
-
-          <form onSubmit={handleSubmit}>
-            {shiftData.map((item, index) => (
-              <div key={index} style={{ marginBottom: "0.5rem" }}>
-                <strong>{formatDate(item.date)}</strong>
-                <div>
-                  <label>
-                    <input
-                      type="radio"
-                      name={`shift-${index}`}
-                      value="none"
-                      checked={item.selection === "none"}
-                      onChange={() => handleChange(index, "none")}
-                    />
-                    希望なし
-                  </label>
-                  <label style={{ marginLeft: "1rem" }}>
-                    <input
-                      type="radio"
-                      name={`shift-${index}`}
-                      value="off"
-                      checked={item.selection === "off"}
-                      onChange={() => handleChange(index, "off")}
-                    />
-                    休み希望
-                  </label>
-                  <label style={{ marginLeft: "1rem" }}>
-                    <input
-                      type="radio"
-                      name={`shift-${index}`}
-                      value="night"
-                      checked={item.selection === "night"}
-                      onChange={() => handleChange(index, "night")}
-                    />
-                    夜勤希望
-                  </label>
-                </div>
-              </div>
-            ))}
-
-            <button type="submit" style={{ marginTop: "1.5rem" }}>
-              送信
-            </button>
-          </form>
-
-          {submitStatus && (
-            <p style={{ marginTop: "1rem", color: "green", fontWeight: "bold" }}>{submitStatus}</p>
-          )}
-
-          <div style={{ marginTop: "2rem" }}>
-            <Link to="/admin">→ 管理者画面へ</Link>
+      <form onSubmit={handleSubmit}>
+        {shiftData.map((item, index) => (
+          <div key={index} style={{ marginBottom: "0.5rem" }}>
+            <strong>{formatDate(item.date)}</strong>
+            <div>
+              <label>
+                <input
+                  type="radio"
+                  name={`shift-${index}`}
+                  value="none"
+                  checked={item.selection === "none"}
+                  onChange={() => handleChange(index, "none")}
+                />
+                希望なし
+              </label>
+              <label style={{ marginLeft: "1rem" }}>
+                <input
+                  type="radio"
+                  name={`shift-${index}`}
+                  value="off"
+                  checked={item.selection === "off"}
+                  onChange={() => handleChange(index, "off")}
+                />
+                休み希望
+              </label>
+              <label style={{ marginLeft: "1rem" }}>
+                <input
+                  type="radio"
+                  name={`shift-${index}`}
+                  value="night"
+                  checked={item.selection === "night"}
+                  onChange={() => handleChange(index, "night")}
+                />
+                夜勤希望
+              </label>
+            </div>
           </div>
-        </div>
+        ))}
+
+        <button type="submit" style={{ marginTop: "1.5rem" }}>
+          送信
+        </button>
+      </form>
+
+      {submitStatus && (
+        <p style={{ marginTop: "1rem", color: "green", fontWeight: "bold" }}>{submitStatus}</p>
       )}
+
+      <div style={{ marginTop: "2rem" }}>
+        <Link to="/admin">→ 管理者画面へ</Link>
+      </div>
     </div>
   );
 }
