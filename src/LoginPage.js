@@ -1,12 +1,25 @@
-import React from "react";
-import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import React, { useEffect } from "react";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 
 function LoginPage() {
+  const auth = getAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        navigate("/home");
+      }
+    });
+    return () => unsubscribe();
+  }, [auth, navigate]);
+
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
-    const auth = getAuth();
     try {
       await signInWithPopup(auth, provider);
+      // 遷移は onAuthStateChanged に任せる
     } catch (error) {
       console.error("ログインエラー:", error);
     }

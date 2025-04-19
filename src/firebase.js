@@ -7,9 +7,10 @@ const firebaseConfig = {
   apiKey: "AIzaSyDfXzWslqOTMBHEq983qOk43HKiBGc7H5s",
   authDomain: "or-shift-app.firebaseapp.com",
   projectId: "or-shift-app",
-  storageBucket: "or-shift-app.appspot.com", // ← typo修正（.app → .app**spot**.com）
+  storageBucket: "or-shift-app.firebasestorage.app",
   messagingSenderId: "781791263711",
-  appId: "1:781791263711:web:4df8085607558168a1626a"
+  appId: "1:781791263711:web:4df8085607558168a1626a",
+  measurementId: "G-61HP4FWR4Q"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -18,8 +19,8 @@ const auth = getAuth(app);
 
 // ✅ ローカルならエミュレーターに接続
 if (window.location.hostname === "localhost") {
-  connectFirestoreEmulator(db, "localhost", 8080);
-  connectAuthEmulator(auth, "http://localhost:9099");
+  //connectFirestoreEmulator(db, "localhost", 8080);
+  //connectAuthEmulator(auth, "http://localhost:9099");
 }
 
 export { db, auth };
