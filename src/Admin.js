@@ -298,7 +298,7 @@ setEvents(eventMap);
   
   console.log("現在のユーザー:", currentUser?.email);
 
-  if (currentUser.email !== "kwshrk@gmail.com") {
+  if (currentUser.email !== "kwshrk@gmail.com,fuyumi.gemba@marianna-u.ac.jp") {
     return <p style={{ padding: "2rem", fontWeight: "bold", color: "red" }}>アクセス権がありません</p>;
   }
   

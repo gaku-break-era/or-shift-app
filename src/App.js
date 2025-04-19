@@ -14,15 +14,17 @@ import ProcedureDetail from "./ProcedureDetail";
 import AutoAssignmentScreen from './pages/AutoAssignmentScreen';
 import MainForm from "./MainForm";
 import DailyAssignmentScreen from "./pages/DailyAssignmentScreen";
+import LoginPage from "./LoginPage";
 
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<MainForm />} />
+        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/login" element={<LoginPage />} /> 
+        <Route path="/form" element={<MainForm />} />
         <Route path="/admin" element={<Admin />} />
-        // ルートに追加
         <Route path="/admin-events" element={<AdminEvents />} />
         <Route path="/admin-events-list" element={<AdminEventList />} />
         <Route path="/home" element={<StaffHome />} />
@@ -31,6 +33,7 @@ function App() {
         <Route path="/procedures/:id" element={<ProcedureDetail />} />
         <Route path="/auto-assignment" element={<AutoAssignmentScreen />} />
          <Route path="/daily-assignment" element={<DailyAssignmentScreen />} />
+         
       </Routes>
     </Router>
   );
