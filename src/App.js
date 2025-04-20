@@ -2,7 +2,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import LoginPage from "./LoginPage";
-import MainForm from "./MainForm";
+import MobileShiftForm from "./MobileShiftForm";
 import Admin from "./Admin";
 import AdminEvents from "./AdminEvents";
 import AdminEventList from "./AdminEventList";
@@ -22,7 +22,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
 
         {/* ✅ ログイン後の各種機能 */}
-        <Route path="/form" element={<MainForm />} />
+        <Route path="/form" element={<MobileShiftForm />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin-events" element={<AdminEvents />} />
         <Route path="/admin-events-list" element={<AdminEventList />} />

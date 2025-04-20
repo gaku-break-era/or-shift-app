@@ -1,0 +1,47 @@
+.calendar {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .calendar th,
+  .calendar td {
+    border: 1px solid #ccc;
+    width: 14.2%;
+    height: 100px;
+    vertical-align: top;
+    padding: 4px;
+    position: relative;
+  }
+  .day-number {
+    font-weight: bold;
+  }
+  .shift-type {
+    font-size: 0.8rem;
+    margin-top: 4px;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .shift-comment {
+    font-size: 0.7rem;
+    color: #555;
+    margin-top: 4px;
+  }
+  
+  .modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal {
+    background: #fff;
+    padding: 1rem;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 400px;
+  }
+  
