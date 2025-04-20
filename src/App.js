@@ -12,9 +12,10 @@ import ProcedureList from "./ProcedureList";
 import ProcedureDetail from "./ProcedureDetail";
 import SettingsPage from "./Settings"; // ✅ 実際に存在するファイル名に合わせる
 import Settings from "./Settings";
+import AutoAssignmentScreen from "./pages/AutoAssignmentScreen";
+import DailyAssignmentScreen from "./pages/DailyAssignmentScreen";
+import SurgeryRequest from "./pages/SurgeryRequest"; 
 
-// import AutoAssignmentScreen from "./AutoAssignmentScreen";
-// import DailyAssignmentScreen from "./DailyAssignmentScreen";
 
 function App() {
   return (
@@ -35,8 +36,10 @@ function App() {
         <Route path="/procedures/:id" element={<ProcedureDetail />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings" element={<Settings />} />
-
-
+        <Route path="/daily-assignment" element={<DailyAssignmentScreen />} />
+        <Route path="/auto-assignment" element={<AutoAssignmentScreen />} />
+        <Route path="/surgery-request" element={<SurgeryRequest />} />
+        
 
         {/* ✅ "/" アクセス時にもログインページに飛ばす */}
         <Route path="/" element={<LoginPage />} />
