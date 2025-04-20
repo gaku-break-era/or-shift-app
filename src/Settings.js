@@ -1,5 +1,5 @@
 // src/Settings.js
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
   collection,
@@ -7,147 +7,263 @@ import {
   getDocs,
   deleteDoc,
   doc,
-  setDoc,
+  updateDoc,
 } from "firebase/firestore";
+import "./Settings.css";
+import Header from "./components/ui/Header";
 
 function Settings() {
-  const [staffList, setStaffList] = useState([]);
-  const [formData, setFormData] = useState({
-    employeeId: "",
+  const [staff, setStaff] = useState({
+    id: "",
     lastName: "",
     firstName: "",
     email: "",
-    entryYear: "",
+    year: "",
     role: "staff",
   });
-  const [error, setError] = useState("");
+  const [staffList, setStaffList] = useState([]);
+  const [filter, setFilter] = useState("");
+  const [editingStaff, setEditingStaff] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
-  const fetchStaffList = async () => {
-    const snapshot = await getDocs(collection(db, "staffList"));
-    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  const fetchStaff = async () => {
+    const querySnapshot = await getDocs(collection(db, "staffList"));
+    const data = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
     setStaffList(data);
   };
 
   useEffect(() => {
-    fetchStaffList();
+    fetchStaff();
   }, []);
 
-  const handleChange = (e) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!formData.employeeId || !formData.email) {
-      setError("社員番号とメールアドレスは必須です。");
+  const handleAdd = async () => {
+    const exists = staffList.some((s) => s.employeeId === staff.id);
+    if (exists) {
+      alert("その社員番号はすでに登録されています。");
       return;
     }
+    await addDoc(collection(db, "staffList"), {
+      employeeId: staff.id,
+      lastName: staff.lastName,
+      firstName: staff.firstName,
+      email: staff.email,
+      year: staff.year,
+      role: staff.role,
+    });
+    setStaff({
+      id: "",
+      lastName: "",
+      firstName: "",
+      email: "",
+      year: "",
+      role: "staff",
+    });
+    fetchStaff();
+  };
 
-    const existing = staffList.find(
-      (s) => s.employeeId === formData.employeeId
-    );
-    if (existing) {
-      setError("この社員番号は既に登録されています。");
-      return;
-    }
-
-    try {
-      await setDoc(doc(db, "staffList", formData.employeeId), {
-        ...formData,
-        entryYear: parseInt(formData.entryYear),
-        skills: {},
-      });
-      setError("");
-      setFormData({
-        employeeId: "",
-        lastName: "",
-        firstName: "",
-        email: "",
-        entryYear: "",
-        role: "staff",
-      });
-      fetchStaffList();
-    } catch (err) {
-      console.error("登録エラー:", err);
-      setError("登録に失敗しました。");
+  const handleDelete = async (docId) => {
+    if (window.confirm("本当に削除しますか？")) {
+      await deleteDoc(doc(db, "staffList", docId));
+      fetchStaff();
     }
   };
 
-  const handleDelete = async (id) => {
-    await deleteDoc(doc(db, "staffList", id));
-    fetchStaffList();
+  const handleEdit = (staff) => {
+    setEditingStaff({ ...staff });
+    setEditModalOpen(true);
   };
 
-  const handleRoleChange = async (id, newRole) => {
-    const staff = staffList.find((s) => s.employeeId === id);
-    if (!staff) return;
-
-    await setDoc(doc(db, "staffList", id), { ...staff, role: newRole });
-    fetchStaffList();
+  const saveEdit = async () => {
+    const ref = doc(db, "staffList", editingStaff.id);
+    const { id, ...data } = editingStaff;
+    await updateDoc(ref, data);
+    setEditModalOpen(false);
+    fetchStaff();
   };
+
+  const filteredList = staffList.filter((s) =>
+    [s.employeeId, s.lastName, s.firstName].some((field) =>
+      (field || "").toLowerCase().includes(filter.toLowerCase())
+    )
+  );
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: "700px", margin: "auto" }}>
-      <h2>スタッフ登録・管理</h2>
+    <div className="settings-container">
+      <Header />
+      <h2 className="settings-title">スタッフ登録・管理</h2>
 
-      <form onSubmit={handleSubmit} style={{ marginBottom: "2rem" }}>
-        <h3>新規登録</h3>
-        <input name="employeeId" placeholder="社員番号" value={formData.employeeId} onChange={handleChange} required />
-        <input name="lastName" placeholder="姓" value={formData.lastName} onChange={handleChange} />
-        <input name="firstName" placeholder="名" value={formData.firstName} onChange={handleChange} />
-        <input name="email" placeholder="メールアドレス" value={formData.email} onChange={handleChange} required />
-        <input name="entryYear" placeholder="入職年 (例: 2022)" value={formData.entryYear} onChange={handleChange} />
-        <select name="role" value={formData.role} onChange={handleChange}>
-          <option value="admin">管理者</option>
-          <option value="shift_manager">シフト管理者</option>
-          <option value="assignment_manager">配置管理者</option>
-          <option value="staff">スタッフ</option>
-        </select>
-        <button type="submit">登録</button>
-        {error && <p style={{ color: "red" }}>{error}</p>}
-      </form>
-
-      <h3>登録済みスタッフ一覧</h3>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th>社員番号</th>
-            <th>氏名</th>
-            <th>メール</th>
-            <th>入職年</th>
-            <th>権限</th>
-            <th>操作</th>
-          </tr>
-        </thead>
+      <table className="staff-form-table">
         <tbody>
-          {staffList.map((staff) => (
-            <tr key={staff.employeeId}>
-              <td>{staff.employeeId}</td>
-              <td>{staff.lastName} {staff.firstName}</td>
-              <td>{staff.email}</td>
-              <td>{staff.entryYear}</td>
-              <td>
+          <tr>
+            <td>社員番号</td>
+            <td>
+              <input
+                type="text"
+                value={staff.id}
+                onChange={(e) => setStaff({ ...staff, id: e.target.value })}
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>姓</td>
+            <td>
+              <input
+                type="text"
+                value={staff.lastName}
+                onChange={(e) => setStaff({ ...staff, lastName: e.target.value })}
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>名</td>
+            <td>
+              <input
+                type="text"
+                value={staff.firstName}
+                onChange={(e) => setStaff({ ...staff, firstName: e.target.value })}
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>メールアドレス</td>
+            <td>
+              <input
+                type="email"
+                value={staff.email}
+                onChange={(e) => setStaff({ ...staff, email: e.target.value })}
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>入職年</td>
+            <td>
+              <input
+                type="text"
+                value={staff.year}
+                onChange={(e) => setStaff({ ...staff, year: e.target.value })}
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>権限</td>
+            <td>
+              <select
+                value={staff.role}
+                onChange={(e) => setStaff({ ...staff, role: e.target.value })}
+              >
+                <option value="admin">管理者</option>
+                <option value="shift_manager">シフト管理者</option>
+                <option value="assignment_manager">配置管理者</option>
+                <option value="staff">スタッフ</option>
+              </select>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <button className="add-btn" onClick={handleAdd}>
+        スタッフを追加
+      </button>
+
+      <div className="filter-input">
+        <input
+          type="text"
+          placeholder="社員番号または氏名で検索"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
+
+      <div className="staff-list-scroll">
+        <table className="staff-list-table">
+        <thead>
+            <tr>
+                <th>社員番号</th>
+                <th>氏名</th>
+                <th>メール</th>
+                <th>入職年</th>
+                <th>権限</th>
+                <th>変更</th>
+                <th>削除</th>
+            </tr>
+            </thead>
+
+            <tbody>
+                {filteredList.map((s) => (
+                    <tr key={s.id}>
+                    <td>{s.employeeId}</td>
+                    <td>{s.lastName} {s.firstName}</td>
+                    <td>{s.email}</td>
+                    <td>{s.year}</td>
+                    <td>{s.role}</td>
+                    <td>
+                        <button className="edit-btn" onClick={() => handleEdit(s)}>変更</button>
+                    </td>
+                    <td>
+                        <button className="delete-btn" onClick={() => handleDelete(s.id)}>削除</button>
+                    </td>
+                    </tr>
+                ))}
+                </tbody>
+        
+        </table>
+      </div>
+
+      {editModalOpen && (
+        <div className="modal-backdrop" onClick={() => setEditModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>スタッフ情報の変更</h3>
+              <button className="close-btn" onClick={() => setEditModalOpen(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              {["employeeId", "lastName", "firstName", "email", "year"].map((field) => (
+                <div key={field} style={{ marginBottom: "1rem" }}>
+                  <label>{{
+                    employeeId: "社員番号",
+                    lastName: "姓",
+                    firstName: "名",
+                    email: "メール",
+                    year: "入職年"
+                  }[field]}</label>
+                  <input
+                    type="text"
+                    value={editingStaff[field]}
+                    onChange={(e) =>
+                      setEditingStaff({ ...editingStaff, [field]: e.target.value })
+                    }
+                    style={{ width: "100%", padding: "0.5rem", border: "1px solid #ccc" }}
+                  />
+                </div>
+              ))}
+              <div>
+                <label>権限</label>
                 <select
-                  value={staff.role}
-                  onChange={(e) => handleRoleChange(staff.employeeId, e.target.value)}
+                  value={editingStaff.role}
+                  onChange={(e) =>
+                    setEditingStaff({ ...editingStaff, role: e.target.value })
+                  }
+                  style={{ width: "100%", padding: "0.5rem", border: "1px solid #ccc" }}
                 >
                   <option value="admin">管理者</option>
                   <option value="shift_manager">シフト管理者</option>
                   <option value="assignment_manager">配置管理者</option>
                   <option value="staff">スタッフ</option>
                 </select>
-              </td>
-              <td>
-                <button onClick={() => handleDelete(staff.employeeId)}>削除</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </div>
+              <div style={{ marginTop: "1.5rem", textAlign: "center" }}>
+                <button onClick={saveEdit} className="save-btn">確定</button>
+                <button onClick={() => setEditModalOpen(false)} style={{ marginLeft: "1rem" }}>
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

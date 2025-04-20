@@ -10,7 +10,9 @@ import StaffHome from "./StaffHome";
 import WeeklyAssignments from "./WeeklyAssignments";
 import ProcedureList from "./ProcedureList";
 import ProcedureDetail from "./ProcedureDetail";
+import SettingsPage from "./Settings"; // ✅ 実際に存在するファイル名に合わせる
 import Settings from "./Settings";
+
 // import AutoAssignmentScreen from "./AutoAssignmentScreen";
 // import DailyAssignmentScreen from "./DailyAssignmentScreen";
 
@@ -31,7 +33,10 @@ function App() {
         <Route path="/assignments" element={<WeeklyAssignments />} />
         <Route path="/procedures" element={<ProcedureList />} />
         <Route path="/procedures/:id" element={<ProcedureDetail />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings" element={<Settings />} />
+
+
 
         {/* ✅ "/" アクセス時にもログインページに飛ばす */}
         <Route path="/" element={<LoginPage />} />
