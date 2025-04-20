@@ -1,40 +1,37 @@
+// src/components/ui/Header.js
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import "./Header.css";
 
 function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    // 仮のログアウト処理 → 後でauthからsignOutに変更
-    alert("ログアウトしました（仮）");
-    navigate("/login");
-  };
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
   const closeMenu = () => setMenuOpen(false);
 
   return (
     <header className="header">
-      <div className="logo" onClick={() => navigate("/home")}>ScrubEdge</div>
+      <div className="logo">ScrubEdge</div>
 
-      {/* デスクトップ用メニュー */}
+      {/* PC/iPad表示 */}
       <nav className="nav-links desktop-only">
         <Link to="/home">HOME</Link>
-        <button onClick={handleLogout}>ログアウト</button>
+        <Link to="/settings">設定</Link>
+        <button onClick={() => alert("ログアウト処理（仮）")}>ログアウト</button>
       </nav>
 
-      {/* モバイル用ハンバーガー */}
+      {/* スマホ用ハンバーガー */}
       <div className="hamburger mobile-only" onClick={toggleMenu}>
         ☰
       </div>
 
-      {/* モバイルメニュー展開 */}
       {menuOpen && (
         <div className="mobile-menu">
           <Link to="/home" onClick={closeMenu}>HOME</Link>
-          <button onClick={() => { handleLogout(); closeMenu(); }}>ログアウト</button>
+          <Link to="/settings" onClick={closeMenu}>設定</Link>
+          <button onClick={() => { alert("ログアウト処理（仮）"); closeMenu(); }}>
+            ログアウト
+          </button>
         </div>
       )}
     </header>
