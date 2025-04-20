@@ -15,6 +15,7 @@ import Settings from "./Settings";
 import AutoAssignmentScreen from "./pages/AutoAssignmentScreen";
 import DailyAssignmentScreen from "./pages/DailyAssignmentScreen";
 import SurgeryRequest from "./pages/SurgeryRequest"; 
+import SkillChart from "./pages/SkillChart";
 
 
 function App() {
@@ -39,6 +40,7 @@ function App() {
         <Route path="/daily-assignment" element={<DailyAssignmentScreen />} />
         <Route path="/auto-assignment" element={<AutoAssignmentScreen />} />
         <Route path="/surgery-request" element={<SurgeryRequest />} />
+        <Route path="/skills" element={<SkillChart />} />
         
 
         {/* ✅ "/" アクセス時にもログインページに飛ばす */}
