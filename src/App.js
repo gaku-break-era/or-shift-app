@@ -16,6 +16,7 @@ import AutoAssignmentScreen from "./pages/AutoAssignmentScreen";
 import DailyAssignmentScreen from "./pages/DailyAssignmentScreen";
 import SurgeryRequest from "./pages/SurgeryRequest"; 
 import SkillChart from "./pages/SkillChart";
+import ProcedureMaster from "./pages/ProcedureMaster";
 
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
         <Route path="/auto-assignment" element={<AutoAssignmentScreen />} />
         <Route path="/surgery-request" element={<SurgeryRequest />} />
         <Route path="/skills" element={<SkillChart />} />
+        <Route path="/procedure-master" element={<ProcedureMaster />} />
         
 
         {/* ✅ "/" アクセス時にもログインページに飛ばす */}

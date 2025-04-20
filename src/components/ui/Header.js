@@ -19,6 +19,7 @@ function Header() {
     { path: "/mobile-form", label: "モバイルフォーム" },
     { path: "/surgery-request", label: "手術申し込み" },
     { path: "/daily-assignment", label: "日次割り当て" },
+    { path: "/procedure-master", label: "診療科・術式マスター" },
   ];
 
   return (
