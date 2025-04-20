@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
-import "./CalendarStyles.css"; // カスタムスタイル用のCSSを追加（別途作成）
+import { doc, setDoc, Timestamp } from "firebase/firestore";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { db } from "./firebase";
+import "./CalendarStyles.css";
 
 function MobileShiftForm() {
   const today = new Date();
@@ -12,7 +15,18 @@ function MobileShiftForm() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedType, setSelectedType] = useState("none");
   const [comment, setComment] = useState("");
-  const [shiftData, setShiftData] = useState({}); // { "2025-06-01": {type, comment} }
+  const [shiftData, setShiftData] = useState({});
+  const [user, setUser] = useState(null);
+  const [submitStatus, setSubmitStatus] = useState("");
+
+  const auth = getAuth();
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const year = targetMonth.getFullYear();
@@ -24,11 +38,7 @@ function MobileShiftForm() {
     const matrix = [];
     let week = [];
 
-    // 空白マス埋め（前月分）
-    for (let i = 0; i < firstDay.getDay(); i++) {
-      week.push(null);
-    }
-
+    for (let i = 0; i < firstDay.getDay(); i++) week.push(null);
     for (let d = 1; d <= lastDay.getDate(); d++) {
       week.push(new Date(year, month, d));
       if (week.length === 7) {
@@ -36,8 +46,6 @@ function MobileShiftForm() {
         week = [];
       }
     }
-
-    // 空白マス埋め（翌月分）
     if (week.length) {
       while (week.length < 7) week.push(null);
       matrix.push(week);
@@ -57,46 +65,89 @@ function MobileShiftForm() {
 
   const handleSave = () => {
     const newData = { ...shiftData, [selectedDate]: { type: selectedType, comment } };
+
     const offCount = Object.values(newData).filter((d) => d.type === "off").length;
-    if (offCount > 3) {
+    const nightCount = Object.values(newData).filter((d) => d.type === "night").length;
+
+    if (offCount + nightCount > 3) {
       alert("休み希望（夜勤含む）は最大3日までです。");
       return;
     }
+    if (nightCount > 1) {
+      alert("夜勤希望は最大1回までです。");
+      return;
+    }
+
     setShiftData(newData);
     setSelectedDate(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!user) {
+      alert("ログインが必要です");
+      return;
+    }
+
+    const year = targetMonth.getFullYear();
+    const month = targetMonth.getMonth() + 1;
+    const docId = `${user.displayName || user.email}_${year}${String(month).padStart(2, "0")}`;
+
+    const shifts = Object.entries(shiftData).map(([date, value]) => ({
+      date,
+      selection: value.type,
+      comment: value.comment || "",
+    }));
+
+    const dataToSend = {
+      name: user.displayName || "",
+      email: user.email || "",
+      submittedAt: Timestamp.now(),
+      shifts,
+    };
+
+    try {
+      await setDoc(doc(db, "shiftRequests", docId), dataToSend);
+      setSubmitStatus("送信が完了しました！");
+    } catch (err) {
+      console.error("送信エラー:", err);
+      setSubmitStatus("送信に失敗しました。");
+    }
   };
 
   const getLabelStyle = (type) => {
     switch (type) {
       case "off":
-        return { backgroundColor: "#ffdddd", color: "#d00" };
+        return { backgroundColor: "#ffeaea", color: "#d00" };
       case "night":
-        return { backgroundColor: "#ddeeff", color: "#007" };
+        return { backgroundColor: "#e1ecff", color: "#005" };
       default:
         return {};
     }
   };
 
   return (
-    <div style={{ padding: "1rem", fontFamily: "sans-serif" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
-        <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>ScrubEdge</div>
-        <div>
+    <div className="mobile-form">
+      <header className="header">
+        <div className="logo">ScrubEdge</div>
+        <div className="nav-buttons">
           <button onClick={() => (window.location.href = "/home")}>HOME</button>
-          <button onClick={() => alert("ログアウト処理（仮）")}>ログアウト</button>
+          <button onClick={() => auth.signOut()}>ログアウト</button>
         </div>
       </header>
 
-      <h2>{targetMonth.getFullYear()}年{targetMonth.getMonth() + 1}月 シフト希望</h2>
+      <h2 className="month-title">
+        {targetMonth.getFullYear()}年{targetMonth.getMonth() + 1}月 シフト希望
+      </h2>
+
+      <div className="weekday-row">
+        {["日", "月", "火", "水", "木", "金", "土"].map((d, i) => (
+          <div key={i} className={`weekday ${i === 0 ? "sun" : i === 6 ? "sat" : ""}`}>
+            {d}
+          </div>
+        ))}
+      </div>
 
       <table className="calendar">
-        <thead>
-          <tr>
-            {["日", "月", "火", "水", "木", "金", "土"].map((d) => (
-              <th key={d}>{d}</th>
-            ))}
-          </tr>
-        </thead>
         <tbody>
           {calendarData.map((week, i) => (
             <tr key={i}>
@@ -126,28 +177,48 @@ function MobileShiftForm() {
         </tbody>
       </table>
 
+      <button onClick={handleSubmit} className="save-btn" style={{ marginBottom: "1rem" }}>
+        この内容で送信
+      </button>
+      {submitStatus && <p style={{ color: "green", textAlign: "center" }}>{submitStatus}</p>}
+
       {/* モーダル */}
       {selectedDate && (
         <div className="modal-backdrop">
           <div className="modal">
-            <h3>{selectedDate} の希望</h3>
-            <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)}>
-              <option value="none">希望なし</option>
-              <option value="off">休み希望</option>
-              <option value="night">夜勤希望</option>
-            </select>
-            <textarea
-              rows={3}
-              placeholder="コメント（任意）"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              style={{ width: "100%", marginTop: "0.5rem" }}
-            />
-            <div style={{ marginTop: "1rem" }}>
-              <button onClick={handleSave}>保存</button>
-              <button onClick={() => setSelectedDate(null)} style={{ marginLeft: "1rem" }}>
-                閉じる
-              </button>
+            <div className="modal-header">
+              <h3>{selectedDate}</h3>
+              <button onClick={() => setSelectedDate(null)} className="close-btn">×</button>
+            </div>
+            <div className="modal-body">
+              <div className="select-buttons">
+                <button
+                  className={selectedType === "none" ? "selected" : ""}
+                  onClick={() => setSelectedType("none")}
+                >
+                  希望なし
+                </button>
+                <button
+                  className={selectedType === "off" ? "selected" : ""}
+                  onClick={() => setSelectedType("off")}
+                >
+                  休み希望
+                </button>
+                <button
+                  className={selectedType === "night" ? "selected" : ""}
+                  onClick={() => setSelectedType("night")}
+                >
+                  夜勤希望
+                </button>
+              </div>
+              <textarea
+                rows={3}
+                placeholder="コメント（任意）"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                className="comment-box"
+              />
+              <button onClick={handleSave} className="save-btn">保存</button>
             </div>
           </div>
         </div>

@@ -1,0 +1,148 @@
+.mobile-form {
+  padding: 1rem;
+  font-family: sans-serif;
+  max-width: 600px;
+  margin: auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+.logo {
+  font-weight: bold;
+  font-size: 1.4rem;
+}
+
+.nav-buttons button {
+  margin-left: 0.5rem;
+  padding: 0.3rem 0.7rem;
+}
+
+.month-title {
+  text-align: center;
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.weekday-row {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 0.3rem;
+}
+
+.weekday {
+  flex: 1;
+}
+
+.weekday.sun {
+  color: red;
+}
+
+.weekday.sat {
+  color: blue;
+}
+
+.calendar {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 2rem;
+}
+
+.calendar-cell {
+  border: 1px solid #ccc;
+  width: 14.2%;
+  height: 80px;
+  vertical-align: top;
+  padding: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.day-number {
+  font-weight: bold;
+}
+
+.shift-type {
+  font-size: 0.7rem;
+  margin-top: 4px;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.shift-comment {
+  font-size: 0.6rem;
+  color: #666;
+  margin-top: 2px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  width: 90%;
+  max-width: 400px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.close-btn {
+  background: none;
+  font-size: 1.2rem;
+  border: none;
+  cursor: pointer;
+}
+
+.select-buttons button {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  background: #f0f0f0;
+  cursor: pointer;
+}
+
+.select-buttons .selected {
+  background-color: #dce775;
+  font-weight: bold;
+}
+
+.comment-box {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  margin-top: 0.5rem;
+}
+
+.save-btn {
+  margin-top: 1rem;
+  width: 100%;
+  padding: 0.5rem;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
