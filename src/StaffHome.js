@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import Header from "./components/ui/Header";
 
 const thisWeekShift = [
   { day: "月", date: "4/22", shift: "◯" },
@@ -16,7 +17,7 @@ function StaffHome() {
 
   return (
     <div style={{ padding: "1rem", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
-      <h1 style={{ textAlign: "center", marginBottom: "1rem" }}>ScrubEdge ホーム</h1>
+      <Header />
 
       {/* シフト希望提出ボタン */}
       <Link to="/form">

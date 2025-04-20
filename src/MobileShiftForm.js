@@ -1,8 +1,10 @@
+// src/MobileShiftForm.js
 import React, { useState, useEffect } from "react";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from "./firebase";
 import "./CalendarStyles.css";
+import Header from "./components/ui/Header"; // ✅ 共通ヘッダーをインポート
 
 function MobileShiftForm() {
   const today = new Date();
@@ -31,7 +33,6 @@ function MobileShiftForm() {
   useEffect(() => {
     const year = targetMonth.getFullYear();
     const month = targetMonth.getMonth();
-
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
 
@@ -127,13 +128,7 @@ function MobileShiftForm() {
 
   return (
     <div className="mobile-form">
-      <header className="header">
-        <div className="logo">ScrubEdge</div>
-        <div className="nav-buttons">
-          <button onClick={() => (window.location.href = "/home")}>HOME</button>
-          <button onClick={() => auth.signOut()}>ログアウト</button>
-        </div>
-      </header>
+      <Header /> {/* ✅ 共通ヘッダーに差し替え */}
 
       <h2 className="month-title">
         {targetMonth.getFullYear()}年{targetMonth.getMonth() + 1}月 シフト希望

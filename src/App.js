@@ -10,8 +10,8 @@ import StaffHome from "./StaffHome";
 import WeeklyAssignments from "./WeeklyAssignments";
 import ProcedureList from "./ProcedureList";
 import ProcedureDetail from "./ProcedureDetail";
-//import AutoAssignmentScreen from "./AutoAssignmentScreen";
-//import DailyAssignmentScreen from "./DailyAssignmentScreen";
+// import AutoAssignmentScreen from "./AutoAssignmentScreen";
+// import DailyAssignmentScreen from "./DailyAssignmentScreen";
 
 function App() {
   return (
@@ -22,6 +22,7 @@ function App() {
 
         {/* ✅ ログイン後の各種機能 */}
         <Route path="/form" element={<MobileShiftForm />} />
+        <Route path="/mobile-form" element={<MobileShiftForm />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin-events" element={<AdminEvents />} />
         <Route path="/admin-events-list" element={<AdminEventList />} />
@@ -29,7 +30,6 @@ function App() {
         <Route path="/assignments" element={<WeeklyAssignments />} />
         <Route path="/procedures" element={<ProcedureList />} />
         <Route path="/procedures/:id" element={<ProcedureDetail />} />
-        <Route path="/mobile-form" element={<MobileShiftForm />} />
 
         {/* ✅ "/" アクセス時にもログインページに飛ばす */}
         <Route path="/" element={<LoginPage />} />
@@ -37,8 +37,5 @@ function App() {
     </Router>
   );
 }
-
-//<Route path="/auto-assignment" element={<AutoAssignmentScreen />} />
-//<Route path="/daily-assignment" element={<DailyAssignmentScreen />} />
 
 export default App;
