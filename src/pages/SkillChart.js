@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { Radar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -10,7 +11,6 @@ import {
   Legend,
 } from "chart.js";
 import { db } from "../firebase";
-import { getAuth } from "firebase/auth";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import Header from "../components/ui/Header";
 
@@ -35,23 +35,31 @@ const statusMap = {
 };
 
 function SkillChart() {
+  const { staffId } = useParams();
   const [departmentProgress, setDepartmentProgress] = useState({});
   const [procedureDetails, setProcedureDetails] = useState({});
+  const [staffName, setStaffName] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
-      const user = getAuth().currentUser;
-      if (!user) return;
+      if (!staffId) return;
 
-      const [deptSnap, procSnap, skillSnap] = await Promise.all([
+      const [deptSnap, procSnap, skillSnap, staffSnap] = await Promise.all([
         getDocs(collection(db, "departments")),
         getDocs(collection(db, "procedures")),
-        getDocs(query(collection(db, "skillRecords"), where("userId", "==", user.uid))),
+        getDocs(query(collection(db, "skillRecords"), where("userId", "==", staffId))),
+        getDocs(query(collection(db, "staffList"), where("id", "==", staffId))),
       ]);
 
       const departments = deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const procedures = procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const skills = skillSnap.docs.map(doc => doc.data());
+
+      const staffDoc = staffSnap.docs[0];
+      if (staffDoc) {
+        const s = staffDoc.data();
+        setStaffName(`${s.lastName} ${s.firstName}`);
+      }
 
       const deptProgress = {};
       const procedureByDept = {};
@@ -78,7 +86,7 @@ function SkillChart() {
     };
 
     fetchData();
-  }, []);
+  }, [staffId]);
 
   const renderProcedureCharts = () => {
     return Object.entries(procedureDetails).map(([dept, procedures], idx) => {
@@ -137,8 +145,8 @@ function SkillChart() {
   return (
     <div style={{ padding: "1rem" }}>
       <Header />
-      <h2 style={{ textAlign: "center", fontSize: "1.5rem", marginBottom: "2rem" }}>
-        🧠 スキル進捗表
+      <h2 style={{ textAlign: "center", fontSize: "1.5rem", marginBottom: "1rem" }}>
+        🧠 {staffName || "スタッフ"} のスキル進捗表
       </h2>
 
       <div style={{ maxWidth: "400px", margin: "0 auto", height: "400px" }}>
