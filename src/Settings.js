@@ -55,9 +55,15 @@ function Settings() {
       role: staff.role,
     });
 
+    console.log("新規スタッフID:", newStaffRef.id);
+
     const procSnap = await getDocs(collection(db, "procedures"));
+    console.log("登録されている術式数:", procSnap.docs.length);
+
     for (const proc of procSnap.docs) {
       const recordId = `${newStaffRef.id}_${proc.id}`;
+      console.log("→ skillRecord 作成:", recordId); //
+
       await setDoc(doc(db, "skillRecords", recordId), {
         userId: newStaffRef.id,
         procedureId: proc.id,
