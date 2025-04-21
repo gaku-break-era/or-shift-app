@@ -17,6 +17,7 @@ import DailyAssignmentScreen from "./pages/DailyAssignmentScreen";
 import SurgeryRequest from "./pages/SurgeryRequest"; 
 import SkillChart from "./pages/SkillChart";
 import ProcedureMaster from "./pages/ProcedureMaster";
+import AdminProcedures from "./pages/AdminProcedures";
 
 
 function App() {
@@ -43,7 +44,7 @@ function App() {
         <Route path="/surgery-request" element={<SurgeryRequest />} />
         <Route path="/skills" element={<SkillChart />} />
         <Route path="/procedure-master" element={<ProcedureMaster />} />
-        
+        <Route path="/admin-procedures" element={<AdminProcedures />} /> 
 
         {/* ✅ "/" アクセス時にもログインページに飛ばす */}
         <Route path="/" element={<LoginPage />} />

@@ -1,4 +1,3 @@
-// src/Settings.js
 import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
@@ -8,6 +7,7 @@ import {
   deleteDoc,
   doc,
   updateDoc,
+  setDoc,
 } from "firebase/firestore";
 import "./Settings.css";
 import Header from "./components/ui/Header";
@@ -45,7 +45,8 @@ function Settings() {
       alert("その社員番号はすでに登録されています。");
       return;
     }
-    await addDoc(collection(db, "staffList"), {
+
+    const newStaffRef = await addDoc(collection(db, "staffList"), {
       employeeId: staff.id,
       lastName: staff.lastName,
       firstName: staff.firstName,
@@ -53,6 +54,17 @@ function Settings() {
       year: staff.year,
       role: staff.role,
     });
+
+    const procSnap = await getDocs(collection(db, "procedures"));
+    for (const proc of procSnap.docs) {
+      const recordId = `${newStaffRef.id}_${proc.id}`;
+      await setDoc(doc(db, "skillRecords", recordId), {
+        userId: newStaffRef.id,
+        procedureId: proc.id,
+        level: "未経験",
+      });
+    }
+
     setStaff({
       id: "",
       lastName: "",
@@ -179,36 +191,34 @@ function Settings() {
 
       <div className="staff-list-scroll">
         <table className="staff-list-table">
-        <thead>
+          <thead>
             <tr>
-                <th>社員番号</th>
-                <th>氏名</th>
-                <th>メール</th>
-                <th>入職年</th>
-                <th>権限</th>
-                <th>変更</th>
-                <th>削除</th>
+              <th>社員番号</th>
+              <th>氏名</th>
+              <th>メール</th>
+              <th>入職年</th>
+              <th>権限</th>
+              <th>変更</th>
+              <th>削除</th>
             </tr>
-            </thead>
-
-            <tbody>
-                {filteredList.map((s) => (
-                    <tr key={s.id}>
-                    <td>{s.employeeId}</td>
-                    <td>{s.lastName} {s.firstName}</td>
-                    <td>{s.email}</td>
-                    <td>{s.year}</td>
-                    <td>{s.role}</td>
-                    <td>
-                        <button className="edit-btn" onClick={() => handleEdit(s)}>変更</button>
-                    </td>
-                    <td>
-                        <button className="delete-btn" onClick={() => handleDelete(s.id)}>削除</button>
-                    </td>
-                    </tr>
-                ))}
-                </tbody>
-        
+          </thead>
+          <tbody>
+            {filteredList.map((s) => (
+              <tr key={s.id}>
+                <td>{s.employeeId}</td>
+                <td>{s.lastName} {s.firstName}</td>
+                <td>{s.email}</td>
+                <td>{s.year}</td>
+                <td>{s.role}</td>
+                <td>
+                  <button className="edit-btn" onClick={() => handleEdit(s)}>変更</button>
+                </td>
+                <td>
+                  <button className="delete-btn" onClick={() => handleDelete(s.id)}>削除</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
 
@@ -227,7 +237,7 @@ function Settings() {
                     lastName: "姓",
                     firstName: "名",
                     email: "メール",
-                    year: "入職年"
+                    year: "入職年",
                   }[field]}</label>
                   <input
                     type="text"

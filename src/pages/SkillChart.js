@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Radar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -9,6 +9,9 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { db } from "../firebase";
+import { getAuth } from "firebase/auth";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import Header from "../components/ui/Header";
 
 ChartJS.register(
@@ -20,7 +23,6 @@ ChartJS.register(
   Legend
 );
 
-// ステータスと数値の対応
 const statusMap = {
   "未経験": 0,
   "見学済み": 1,
@@ -32,57 +34,56 @@ const statusMap = {
   "指導可": 7,
 };
 
-// ダミーの進捗データ（全科）
-const departmentProgress = {
-  "心臓外科": 60,
-  "整形外科": 80,
-  "消化器外科": 40,
-  "脳神経外科": 30,
-  "泌尿器科": 50,
-  "呼吸器外科": 35,
-  "眼科": 70,
-  "耳鼻科": 55,
-  "産婦人科": 65,
-  "形成外科": 45,
-};
-
-// 各診療科に属する術式と習得状況（ダミー）
-const dummyProcedures = {
-  "心臓外科": {
-    "冠動脈バイパス": "独り立ち",
-    "弁形成術": "経験3回以上",
-    "心房中隔欠損修復": "見学済み",
-    "大動脈置換術": "未経験",
-    "ペースメーカー植え込み": "指導可",
-  },
-  "整形外科": {
-    "人工股関節置換": "経験2回",
-    "人工膝関節置換": "独り立ち",
-    "脊椎固定術": "経験1回",
-    "骨折観血的整復": "見学済み",
-    "関節鏡視下手術": "指導可",
-  },
-};
-
 function SkillChart() {
-  // 全科の進捗レーダーチャート
-  const chartDataAll = {
-    labels: Object.keys(departmentProgress),
-    datasets: [
-      {
-        label: "独り立ち進捗（%）",
-        data: Object.values(departmentProgress),
-        backgroundColor: "rgba(54, 162, 235, 0.2)",
-        borderColor: "rgba(54, 162, 235, 1)",
-        borderWidth: 2,
-      },
-    ],
-  };
+  const [departmentProgress, setDepartmentProgress] = useState({});
+  const [procedureDetails, setProcedureDetails] = useState({});
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const user = getAuth().currentUser;
+      if (!user) return;
+
+      const [deptSnap, procSnap, skillSnap] = await Promise.all([
+        getDocs(collection(db, "departments")),
+        getDocs(collection(db, "procedures")),
+        getDocs(query(collection(db, "skillRecords"), where("userId", "==", user.uid))),
+      ]);
+
+      const departments = deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const procedures = procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const skills = skillSnap.docs.map(doc => doc.data());
+
+      const deptProgress = {};
+      const procedureByDept = {};
+
+      departments.forEach(dept => {
+        const procs = procedures.filter(p => p.departmentId === dept.id);
+        procedureByDept[dept.name] = {};
+        const levels = [];
+
+        procs.forEach(proc => {
+          const skill = skills.find(s => s.procedureId === proc.id);
+          const levelStr = skill?.level || "未経験";
+          const levelVal = statusMap[levelStr];
+          procedureByDept[dept.name][proc.name] = levelStr;
+          levels.push(levelVal);
+        });
+
+        const avg = levels.length ? Math.round((levels.reduce((a, b) => a + b, 0) / levels.length) * 100 / 7) : 0;
+        deptProgress[dept.name] = avg;
+      });
+
+      setDepartmentProgress(deptProgress);
+      setProcedureDetails(procedureByDept);
+    };
+
+    fetchData();
+  }, []);
 
   const renderProcedureCharts = () => {
-    return Object.entries(dummyProcedures).map(([dept, procedures], idx) => {
+    return Object.entries(procedureDetails).map(([dept, procedures], idx) => {
       const labels = Object.keys(procedures);
-      const values = labels.map((proc) => statusMap[procedures[proc]]);
+      const values = labels.map(proc => statusMap[procedures[proc]]);
       const idealLine = new Array(labels.length).fill(statusMap["独り立ち"]);
 
       const chartData = {
@@ -102,7 +103,7 @@ function SkillChart() {
             borderWidth: 3,
             pointRadius: 0,
             fill: false,
-          }
+          },
         ],
       };
 
@@ -124,8 +125,8 @@ function SkillChart() {
                 },
               },
               plugins: {
-                legend: { position: "top" }
-              }
+                legend: { position: "top" },
+              },
             }}
           />
         </div>
@@ -140,29 +141,37 @@ function SkillChart() {
         🧠 スキル進捗表
       </h2>
 
-      {/* 全科の進捗チャート */}
       <div style={{ maxWidth: "400px", margin: "0 auto", height: "400px" }}>
-  <Radar
-    data={chartDataAll}
-    options={{
-      maintainAspectRatio: false, // アスペクト比に縛られず明示的サイズが有効に
-      responsive: true,
-      scales: {
-        r: {
-          min: 0,
-          max: 100,
-          ticks: { stepSize: 20 },
-        },
-      },
-      plugins: {
-        legend: { position: "top" },
-      },
-    }}
-  />
-</div>
+        <Radar
+          data={{
+            labels: Object.keys(departmentProgress),
+            datasets: [
+              {
+                label: "独り立ち進捗（%）",
+                data: Object.values(departmentProgress),
+                backgroundColor: "rgba(54, 162, 235, 0.2)",
+                borderColor: "rgba(54, 162, 235, 1)",
+                borderWidth: 2,
+              },
+            ],
+          }}
+          options={{
+            maintainAspectRatio: false,
+            responsive: true,
+            scales: {
+              r: {
+                min: 0,
+                max: 100,
+                ticks: { stepSize: 20 },
+              },
+            },
+            plugins: {
+              legend: { position: "top" },
+            },
+          }}
+        />
+      </div>
 
-
-      {/* 診療科別チャート */}
       <h2 style={{ textAlign: "center", marginTop: "3rem" }}>
         診療科別：術式ごとの習得状況
       </h2>
