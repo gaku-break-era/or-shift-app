@@ -58,8 +58,15 @@ function Settings() {
 
       console.log("新規スタッフID:", newStaffRef.id);
 
-      const procSnap = await getDocs(collection(db, "procedures"));
-      console.log("登録されている術式数:", procSnap.docs.length);
+      const proceduresRef = collection(db, "procedures");
+      console.log("🟡 proceduresRef:", proceduresRef);
+
+      const procSnap = await getDocs(proceduresRef);
+      console.log("✅ procSnap.docs.length:", procSnap.docs.length);
+
+      if (procSnap.docs.length === 0) {
+        console.warn("⚠️ procedures にデータが存在しません！");
+      }
 
       for (const proc of procSnap.docs) {
         const recordId = `${newStaffRef.id}_${proc.id}`;
