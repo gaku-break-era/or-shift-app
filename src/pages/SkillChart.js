@@ -49,42 +49,42 @@ function SkillChart() {
   const [chartDataByDept, setChartDataByDept] = useState([]);
   const [procedureByDept, setProcedureByDept] = useState({});
   const [skillsById, setSkillsById] = useState({});
+  const [overallChartData, setOverallChartData] = useState(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const [deptSnap, procSnap, skillSnap, staffSnap] = await Promise.all([
-        getDocs(collection(db, "departments")),
-        getDocs(collection(db, "procedures")),
-        getDocs(query(collection(db, "skillRecords"), where("userId", "==", staffId))),
-        getDocs(collection(db, "staffList")),
-      ]);
+  const fetchData = async () => {
+    const [deptSnap, procSnap, skillSnap, staffSnap] = await Promise.all([
+      getDocs(collection(db, "departments")),
+      getDocs(collection(db, "procedures")),
+      getDocs(query(collection(db, "skillRecords"), where("userId", "==", staffId))),
+      getDocs(collection(db, "staffList")),
+    ]);
 
-      const departments = deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const procedures = procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const skills = skillSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const skillMap = {};
-      skills.forEach(s => { skillMap[s.procedureId] = { ...s, id: s.id }; });
-      setSkillsById(skillMap);
+    const departments = deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const procedures = procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const skills = skillSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const skillMap = {};
+    skills.forEach(s => { skillMap[s.procedureId] = { ...s, id: s.id }; });
+    setSkillsById(skillMap);
 
-      const staffDoc = staffSnap.docs.find(doc => doc.id === staffId);
-      if (staffDoc) {
-        const s = staffDoc.data();
-        setStaffName(`${s.lastName} ${s.firstName}`);
-      }
+    const staffDoc = staffSnap.docs.find(doc => doc.id === staffId);
+    if (staffDoc) {
+      const s = staffDoc.data();
+      setStaffName(`${s.lastName} ${s.firstName}`);
+    }
 
-      const chartArr = [];
-      const proceduresGrouped = {};
+    const chartArr = [];
+    const proceduresGrouped = {};
+    const overallProgress = [];
 
-      departments.forEach(dept => {
-        const procs = procedures.filter(p => p.departmentId === dept.id);
-        const labels = procs.map(p => p.name);
-        const values = procs.map(p => {
-            const level = skillMap[p.id]?.level;
-            return statusMap[level] ?? 0;
-          });
-          
+    departments.forEach(dept => {
+      const procs = procedures.filter(p => p.departmentId === dept.id);
+      const labels = procs.map(p => p.name);
+      const values = procs.map(p => {
+        const level = skillMap[p.id]?.level;
+        return typeof statusMap[level] === 'number' ? statusMap[level] : 0;
+      });
 
-
+      if (labels.length > 0 && values.every(v => typeof v === 'number')) {
         chartArr.push({
           deptName: dept.name,
           chart: {
@@ -109,18 +109,38 @@ function SkillChart() {
           },
         });
 
-        proceduresGrouped[dept.name] = procs.map(p => ({
-          procedureId: p.id,
-          name: p.name,
-          level: skillMap[p.id]?.level || "未経験",
-          docId: skillMap[p.id]?.id,
-        }));
+        const avg = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100 / 7);
+        overallProgress.push({ dept: dept.name, value: avg });
+      }
+
+      proceduresGrouped[dept.name] = procs.map(p => ({
+        procedureId: p.id,
+        name: p.name,
+        level: skillMap[p.id]?.level || "未経験",
+        docId: skillMap[p.id]?.id,
+      }));
+    });
+
+    setChartDataByDept(chartArr);
+    setProcedureByDept(proceduresGrouped);
+
+    if (overallProgress.length > 0) {
+      setOverallChartData({
+        labels: overallProgress.map(d => d.dept),
+        datasets: [
+          {
+            label: "独り立ち進捗（%）",
+            data: overallProgress.map(d => d.value),
+            backgroundColor: "rgba(54, 162, 235, 0.2)",
+            borderColor: "rgba(54, 162, 235, 1)",
+            borderWidth: 2,
+          },
+        ],
       });
+    }
+  };
 
-      setChartDataByDept(chartArr);
-      setProcedureByDept(proceduresGrouped);
-    };
-
+  useEffect(() => {
     fetchData();
   }, [staffId]);
 
@@ -145,6 +165,8 @@ function SkillChart() {
       }
     }
     alert("保存しました！");
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await fetchData();
   };
 
   return (
@@ -154,6 +176,28 @@ function SkillChart() {
         🧠 {staffName || "スタッフ"} のスキル進捗表
       </h2>
       <p style={{ textAlign: "center", color: "#888" }}>ID: {staffId} のスキルページです。</p>
+
+      {overallChartData && (
+        <div style={{ width: "100%", maxWidth: "600px", height: "400px", margin: "2rem auto" }}>
+          <Radar
+            data={overallChartData}
+            options={{
+              maintainAspectRatio: false,
+              responsive: true,
+              scales: {
+                r: {
+                  min: 0,
+                  max: 100,
+                  ticks: { stepSize: 20 },
+                },
+              },
+              plugins: {
+                legend: { position: "top" },
+              },
+            }}
+          />
+        </div>
+      )}
 
       {chartDataByDept.map(({ deptName, chart }, idx) => (
         <div key={idx} style={{ maxWidth: "800px", margin: "3rem auto" }}>
@@ -178,7 +222,6 @@ function SkillChart() {
             }}
           />
 
-          {/* 編集フォーム */}
           <div style={{ marginTop: "1rem" }}>
             {procedureByDept[deptName]?.map((p) => (
               <div key={p.procedureId} style={{ margin: "0.5rem 0" }}>
