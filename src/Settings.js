@@ -40,46 +40,50 @@ function Settings() {
   }, []);
 
   const handleAdd = async () => {
-    const exists = staffList.some((s) => s.employeeId === staff.id);
-    if (exists) {
-      alert("その社員番号はすでに登録されています。");
-      return;
-    }
+    try {
+      const exists = staffList.some((s) => s.employeeId === staff.id);
+      if (exists) {
+        alert("その社員番号はすでに登録されています。");
+        return;
+      }
 
-    const newStaffRef = await addDoc(collection(db, "staffList"), {
-      employeeId: staff.id,
-      lastName: staff.lastName,
-      firstName: staff.firstName,
-      email: staff.email,
-      year: staff.year,
-      role: staff.role,
-    });
-
-    console.log("新規スタッフID:", newStaffRef.id);
-
-    const procSnap = await getDocs(collection(db, "procedures"));
-    console.log("登録されている術式数:", procSnap.docs.length);
-
-    for (const proc of procSnap.docs) {
-      const recordId = `${newStaffRef.id}_${proc.id}`;
-      console.log("→ skillRecord 作成:", recordId); //
-
-      await setDoc(doc(db, "skillRecords", recordId), {
-        userId: newStaffRef.id,
-        procedureId: proc.id,
-        level: "未経験",
+      const newStaffRef = await addDoc(collection(db, "staffList"), {
+        employeeId: staff.id,
+        lastName: staff.lastName,
+        firstName: staff.firstName,
+        email: staff.email,
+        year: staff.year,
+        role: staff.role,
       });
-    }
 
-    setStaff({
-      id: "",
-      lastName: "",
-      firstName: "",
-      email: "",
-      year: "",
-      role: "staff",
-    });
-    fetchStaff();
+      console.log("新規スタッフID:", newStaffRef.id);
+
+      const procSnap = await getDocs(collection(db, "procedures"));
+      console.log("登録されている術式数:", procSnap.docs.length);
+
+      for (const proc of procSnap.docs) {
+        const recordId = `${newStaffRef.id}_${proc.id}`;
+        console.log("→ skillRecord 作成:", recordId);
+
+        await setDoc(doc(db, "skillRecords", recordId), {
+          userId: newStaffRef.id,
+          procedureId: proc.id,
+          level: "未経験",
+        });
+      }
+
+      setStaff({
+        id: "",
+        lastName: "",
+        firstName: "",
+        email: "",
+        year: "",
+        role: "staff",
+      });
+      fetchStaff();
+    } catch (err) {
+      console.error("❌ エラー発生:", err);
+    }
   };
 
   const handleDelete = async (docId) => {
