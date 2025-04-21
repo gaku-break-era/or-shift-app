@@ -9,6 +9,9 @@ import {
   Filler,
   Tooltip,
   Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale,
 } from "chart.js";
 import { db } from "../firebase";
 import {
@@ -18,6 +21,7 @@ import {
   where,
   updateDoc,
   doc,
+  setDoc,
 } from "firebase/firestore";
 import Header from "../components/ui/Header";
 
@@ -27,7 +31,10 @@ ChartJS.register(
   LineElement,
   Filler,
   Tooltip,
-  Legend
+  Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale
 );
 
 const statusOptions = [
@@ -42,6 +49,7 @@ const statusOptions = [
 ];
 
 const statusMap = Object.fromEntries(statusOptions.map((v, i) => [v, i]));
+const reverseStatusMap = Object.fromEntries(statusOptions.map((v, i) => [i, v]));
 
 function SkillChart() {
   const { staffId } = useParams();
@@ -161,6 +169,12 @@ function SkillChart() {
           await updateDoc(doc(db, "skillRecords", p.docId), {
             level: p.level,
           });
+        } else {
+          await setDoc(doc(collection(db, "skillRecords")), {
+            userId: staffId,
+            procedureId: p.procedureId,
+            level: p.level,
+          });
         }
       }
     }
@@ -224,8 +238,16 @@ function SkillChart() {
 
           <div style={{ marginTop: "1rem" }}>
             {procedureByDept[deptName]?.map((p) => (
-              <div key={p.procedureId} style={{ margin: "0.5rem 0" }}>
-                {p.name}
+              <div key={p.procedureId} style={{ display: "flex", alignItems: "center", margin: "0.5rem 0" }}>
+                <div style={{ width: "30%" }}>{p.name}</div>
+                <div style={{ flexGrow: 1, background: "#eee", height: "10px", margin: "0 1rem", position: "relative" }}>
+                  <div style={{
+                    width: `${(statusMap[p.level] / 7) * 100}%`,
+                    background: "#36a2eb",
+                    height: "100%"
+                  }} />
+                </div>
+                <div style={{ width: "20%", fontSize: "0.9rem", color: "#555" }}>{p.level}</div>
                 <select
                   value={p.level}
                   onChange={(e) => handleChange(deptName, p.procedureId, e.target.value)}
@@ -237,13 +259,12 @@ function SkillChart() {
                 </select>
               </div>
             ))}
+            <div style={{ textAlign: "center", marginTop: "1rem" }}>
+              <button onClick={handleSave} className="save-btn">保存する</button>
+            </div>
           </div>
         </div>
       ))}
-
-      <div style={{ textAlign: "center", marginTop: "2rem" }}>
-        <button onClick={handleSave} className="save-btn">保存する</button>
-      </div>
     </div>
   );
 }
