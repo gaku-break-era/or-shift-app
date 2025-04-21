@@ -48,16 +48,16 @@ function SkillChart() {
         getDocs(collection(db, "departments")),
         getDocs(collection(db, "procedures")),
         getDocs(query(collection(db, "skillRecords"), where("userId", "==", staffId))),
-        getDocs(query(collection(db, "staffList"), where("id", "==", staffId))),
+        getDocs(collection(db, "staffList")),
       ]);
 
       const departments = deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const procedures = procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const skills = skillSnap.docs.map(doc => doc.data());
 
-      const staffDoc = staffSnap.docs[0];
-      if (staffDoc) {
-        const s = staffDoc.data();
+      const matchedDoc = staffSnap.docs.find(doc => doc.id === staffId);
+      if (matchedDoc) {
+        const s = matchedDoc.data();
         setStaffName(`${s.lastName} ${s.firstName}`);
       }
 
@@ -145,9 +145,10 @@ function SkillChart() {
   return (
     <div style={{ padding: "1rem" }}>
       <Header />
-      <h2 style={{ textAlign: "center", fontSize: "1.5rem", marginBottom: "1rem" }}>
+      <h2 style={{ textAlign: "center", fontSize: "1.5rem", marginBottom: "0.5rem" }}>
         🧠 {staffName || "スタッフ"} のスキル進捗表
       </h2>
+      <p style={{ textAlign: "center", color: "#888" }}>ID: {staffId} のスキルページです。</p>
 
       <div style={{ maxWidth: "400px", margin: "0 auto", height: "400px" }}>
         <Radar

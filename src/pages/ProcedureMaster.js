@@ -5,7 +5,7 @@ import {
   getDocs,
   deleteDoc,
   doc,
-  updateDoc
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import Header from "../components/ui/Header";
@@ -31,12 +31,12 @@ function ProcedureMaster() {
 
   const fetchDepartments = async () => {
     const snapshot = await getDocs(collection(db, "departments"));
-    setDepartments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    setDepartments(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
   };
 
   const fetchProcedures = async () => {
     const snapshot = await getDocs(collection(db, "procedures"));
-    setProcedures(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    setProcedures(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
   };
 
   const handleAddOrUpdateDepartment = async () => {
@@ -79,6 +79,40 @@ function ProcedureMaster() {
     }
   };
 
+  const handleDownloadTemplate = () => {
+    const csvContent = "name,departmentName\n術式A,消化器外科\n術式B,整形外科";
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "procedure_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCsvUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const lines = text.split("\n").slice(1); // skip header
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const [name, departmentName] = line.split(",");
+      const dept = departments.find((d) => d.name.trim() === departmentName.trim());
+      if (dept) {
+        await addDoc(collection(db, "procedures"), {
+          name: name.trim(),
+          departmentId: dept.id,
+        });
+      }
+    }
+    alert("CSVから術式を登録しました。");
+    fetchProcedures();
+  };
+
   return (
     <div className="procedure-master-container">
       <Header />
@@ -101,7 +135,15 @@ function ProcedureMaster() {
               <tr key={dept.id}>
                 <td>{dept.name}</td>
                 <td>
-                  <button onClick={() => { setEditingDept(dept); setNewDeptName(dept.name); setShowDeptModal(true); }}>編集</button>
+                  <button
+                    onClick={() => {
+                      setEditingDept(dept);
+                      setNewDeptName(dept.name);
+                      setShowDeptModal(true);
+                    }}
+                  >
+                    編集
+                  </button>
                   <button onClick={() => handleDeleteDepartment(dept.id)}>削除</button>
                 </td>
               </tr>
@@ -111,9 +153,25 @@ function ProcedureMaster() {
       </div>
 
       <h2 className="section-title">🛠 術式マスター</h2>
-      <button className="add-btn" onClick={() => setShowProcModal(true)}>
-        ＋ 術式を追加する
-      </button>
+      <div className="flex-row">
+        <button className="add-btn" onClick={() => setShowProcModal(true)}>
+          ＋ 術式を追加する
+        </button>
+        <button className="add-btn" onClick={handleDownloadTemplate}>
+        📥 CSVテンプレートをダウンロード
+        </button>
+        <button className="add-btn" onClick={() => document.getElementById('csvUpload').click()}>
+        📤 CSVファイルをアップロード
+        </button>
+        <input
+        id="csvUpload"
+        type="file"
+        accept=".csv"
+        onChange={handleCsvUpload}
+        style={{ display: "none" }}
+        />
+
+      </div>
 
       <div className="table-wrapper">
         <table className="master-table">
@@ -130,11 +188,15 @@ function ProcedureMaster() {
                 <td>{proc.name}</td>
                 <td>{departments.find((d) => d.id === proc.departmentId)?.name || "不明"}</td>
                 <td>
-                  <button onClick={() => {
-                    setEditingProc(proc);
-                    setNewProcedure({ name: proc.name, departmentId: proc.departmentId });
-                    setShowProcModal(true);
-                  }}>編集</button>
+                  <button
+                    onClick={() => {
+                      setEditingProc(proc);
+                      setNewProcedure({ name: proc.name, departmentId: proc.departmentId });
+                      setShowProcModal(true);
+                    }}
+                  >
+                    編集
+                  </button>
                   <button onClick={() => handleDeleteProcedure(proc.id)}>削除</button>
                 </td>
               </tr>
@@ -149,7 +211,16 @@ function ProcedureMaster() {
           <div className="modal">
             <div className="modal-header">
               <h3>{editingDept ? "診療科を編集" : "診療科を追加"}</h3>
-              <button className="close-btn" onClick={() => { setShowDeptModal(false); setEditingDept(null); setNewDeptName(""); }}>×</button>
+              <button
+                className="close-btn"
+                onClick={() => {
+                  setShowDeptModal(false);
+                  setEditingDept(null);
+                  setNewDeptName("");
+                }}
+              >
+                ×
+              </button>
             </div>
             <input
               type="text"
@@ -158,7 +229,9 @@ function ProcedureMaster() {
               onChange={(e) => setNewDeptName(e.target.value)}
               className="input-field"
             />
-            <button className="save-btn" onClick={handleAddOrUpdateDepartment}>登録する</button>
+            <button className="save-btn" onClick={handleAddOrUpdateDepartment}>
+              登録する
+            </button>
           </div>
         </div>
       )}
@@ -169,11 +242,16 @@ function ProcedureMaster() {
           <div className="modal">
             <div className="modal-header">
               <h3>{editingProc ? "術式を編集" : "術式を追加"}</h3>
-              <button className="close-btn" onClick={() => {
-                setShowProcModal(false);
-                setEditingProc(null);
-                setNewProcedure({ name: "", departmentId: "" });
-              }}>×</button>
+              <button
+                className="close-btn"
+                onClick={() => {
+                  setShowProcModal(false);
+                  setEditingProc(null);
+                  setNewProcedure({ name: "", departmentId: "" });
+                }}
+              >
+                ×
+              </button>
             </div>
             <input
               type="text"
@@ -198,7 +276,9 @@ function ProcedureMaster() {
                 </option>
               ))}
             </select>
-            <button className="save-btn" onClick={handleAddOrUpdateProcedure}>登録する</button>
+            <button className="save-btn" onClick={handleAddOrUpdateProcedure}>
+              登録する
+            </button>
           </div>
         </div>
       )}
