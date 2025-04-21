@@ -100,11 +100,17 @@ function ProcedureMaster() {
 
     for (const line of lines) {
       if (!line.trim()) continue;
-      const [name, departmentName] = line.split(",");
-      const dept = departments.find((d) => d.name.trim() === departmentName.trim());
-      if (dept) {
+
+      const parts = line.split(",");
+      if (parts.length < 2) continue;
+
+      const name = parts[0]?.trim();
+      const departmentName = parts[1]?.trim();
+
+      const dept = departments.find((d) => d.name.trim() === departmentName);
+      if (dept && name) {
         await addDoc(collection(db, "procedures"), {
-          name: name.trim(),
+          name,
           departmentId: dept.id,
         });
       }
@@ -158,19 +164,18 @@ function ProcedureMaster() {
           ＋ 術式を追加する
         </button>
         <button className="add-btn" onClick={handleDownloadTemplate}>
-        📥 CSVテンプレートをダウンロード
+          📥 CSVテンプレートをダウンロード
         </button>
         <button className="add-btn" onClick={() => document.getElementById('csvUpload').click()}>
-        📤 CSVファイルをアップロード
+          📤 CSVファイルをアップロード
         </button>
         <input
-        id="csvUpload"
-        type="file"
-        accept=".csv"
-        onChange={handleCsvUpload}
-        style={{ display: "none" }}
+          id="csvUpload"
+          type="file"
+          accept=".csv"
+          onChange={handleCsvUpload}
+          style={{ display: "none" }}
         />
-
       </div>
 
       <div className="table-wrapper">
