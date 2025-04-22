@@ -7,7 +7,6 @@
   .sr-container {
     overflow-x: auto;
     padding: 1rem;
-    position: relative;
   }
   
   .sr-table {
@@ -47,6 +46,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    z-index: 999;
   }
   
   .sr-modal {
@@ -69,20 +69,5 @@
     padding: 0.5rem 1rem;
     border: none;
     cursor: pointer;
-  }
-  
-  .blinking-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: red;
-    animation: blink 1s infinite;
-    z-index: 10;
-  }
-  
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
   }
   

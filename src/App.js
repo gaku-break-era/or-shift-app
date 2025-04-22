@@ -14,11 +14,14 @@ import SettingsPage from "./Settings"; // ✅ 実際に存在するファイル�
 import Settings from "./Settings";
 import AutoAssignmentScreen from "./pages/AutoAssignmentScreen";
 import DailyAssignmentScreen from "./pages/DailyAssignmentScreen";
-import SurgeryRequest from "./pages/SurgeryRequest"; 
 import SkillChart from "./pages/SkillChart";
 import SkillsList from "./pages/SkillsList";
 import ProcedureMaster from "./pages/ProcedureMaster";
 import AdminProcedures from "./pages/AdminProcedures";
+import SurgeryRequest from "./pages/SurgeryRequest";
+
+
+
 
 
 function App() {
@@ -41,12 +44,12 @@ function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/daily-assignment" element={<DailyAssignmentScreen />} />
-        <Route path="/auto-assignment" element={<AutoAssignmentScreen />} />
-        <Route path="/surgery-request" element={<SurgeryRequest />} />
+        <Route path="/auto-assignment" element={<AutoAssignmentScreen />} />      
         <Route path="/skills" element={<SkillsList />} />
         <Route path="/skills/:staffId" element={<SkillChart />} />
         <Route path="/procedure-master" element={<ProcedureMaster />} />
         <Route path="/admin-procedures" element={<AdminProcedures />} /> 
+        <Route path="/surgery-request" element={<SurgeryRequest />} />         
 
         {/* ✅ "/" アクセス時にもログインページに飛ばす */}
         <Route path="/" element={<LoginPage />} />
