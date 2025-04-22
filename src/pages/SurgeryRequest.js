@@ -101,7 +101,10 @@ function SurgeryRequest() {
   }, []);
 
   const blinkingLineStyle = {
-    left: `${60 * currentQuarterIndex}px`
+    left: `${60 + 60 * currentQuarterIndex}px`, // OR列60px分加算
+    position: "absolute",
+    top: 0,
+    bottom: 0
   };
 
   return (
@@ -116,7 +119,8 @@ function SurgeryRequest() {
         <button onClick={scrollToCurrentHour}>🕒 現在時刻へ</button>
       </div>
 
-      <div ref={scrollRef} className="sr-container">
+      <div ref={scrollRef} className="sr-container" style={{ position: "relative" }}>
+        <div className="blinking-line" style={blinkingLineStyle}></div>
         <div style={{ display: "flex", paddingLeft: 60 }}>
           <div style={{ width: 60 }}></div>
           {Array.from({ length: 96 }, (_, i) => {
@@ -136,7 +140,7 @@ function SurgeryRequest() {
               </div>
             );
           })}
-          <div className="blinking-line" style={blinkingLineStyle}></div>
+          
         </div>
 
         <div
