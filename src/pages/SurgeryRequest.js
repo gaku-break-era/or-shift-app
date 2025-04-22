@@ -30,7 +30,7 @@ function SurgeryRequest() {
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollLeft = 1440; // scroll to 9:00
+      scrollRef.current.scrollLeft = 2160; // scroll to 9:00 (36 * 60)
     }
   }, []);
 
@@ -38,7 +38,7 @@ function SurgeryRequest() {
     const now = dayjs();
     const quarter = now.hour() * 4 + Math.floor(now.minute() / 15);
     if (scrollRef.current) {
-      scrollRef.current.scrollLeft = quarter * 40;
+      scrollRef.current.scrollLeft = quarter * 60;
     }
   };
 
@@ -95,6 +95,15 @@ function SurgeryRequest() {
     overscan: 5,
   });
 
+  const currentQuarterIndex = useMemo(() => {
+    const now = dayjs();
+    return now.hour() * 4 + Math.floor(now.minute() / 15);
+  }, []);
+
+  const blinkingLineStyle = {
+    left: `${60 * currentQuarterIndex}px`
+  };
+
   return (
     <div style={{ padding: "1rem" }}>
       <Header />
@@ -127,6 +136,7 @@ function SurgeryRequest() {
               </div>
             );
           })}
+          <div className="blinking-line" style={blinkingLineStyle}></div>
         </div>
 
         <div
