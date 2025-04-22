@@ -3,34 +3,102 @@ import dayjs from "dayjs";
 import Header from "../components/ui/Header";
 import "./SurgeryRequest.css";
 
+import {
+  db
+} from "../firebase";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  Timestamp,
+  doc as docRef,
+} from "firebase/firestore";
+
 function SurgeryRequest() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [modalInfo, setModalInfo] = useState(null);
   const [surgeryData, setSurgeryData] = useState({});
 
-  const openModal = (room, hour) => {
-    setModalInfo({
-      room,
-      hour,
-      procedure: "",
-      surgeon: "",
-      position: "",
-      anesthesia: "",
-      start: `${String(hour).padStart(2, "0")}:00`,
-      end: `${String(hour + 1).padStart(2, "0")}:00`,
-    });
+  const openModal = (room, hour, existingData = null) => {
+    if (existingData) {
+      setModalInfo(existingData);
+    } else {
+      setModalInfo({
+        room,
+        hour,
+        procedure: "",
+        surgeon: "",
+        position: "",
+        anesthesia: "",
+        start: `${String(hour).padStart(2, "0")}:00`,
+        end: `${String(hour + 1).padStart(2, "0")}:00`,
+      });
+    }
   };
 
   const closeModal = () => setModalInfo(null);
 
-  const saveSurgery = () => {
-    const key = `${selectedDate.format("YYYY-MM-DD")}_${modalInfo.room}_${modalInfo.hour}`;
+  const saveSurgery = async () => {
+    const key = `${selectedDate.format("YYYY-MM-DD")}_${modalInfo.room}_${modalInfo.start}`;
+
+    if (modalInfo.docId) {
+      const ref = docRef(db, "surgerySchedules", modalInfo.docId);
+      await updateDoc(ref, {
+        ...modalInfo,
+        updatedAt: Timestamp.now(),
+      });
+    } else {
+      const docSnap = await addDoc(collection(db, "surgerySchedules"), {
+        ...modalInfo,
+        date: selectedDate.format("YYYY-MM-DD"),
+        createdAt: Timestamp.now(),
+      });
+      modalInfo.docId = docSnap.id;
+    }
+
     setSurgeryData((prev) => ({ ...prev, [key]: modalInfo }));
+    setModalInfo(null);
+  };
+
+  const handleDelete = async () => {
+    if (!modalInfo.docId) return;
+    const ref = docRef(db, "surgerySchedules", modalInfo.docId);
+    await deleteDoc(ref);
+
+    const key = `${selectedDate.format("YYYY-MM-DD")}_${modalInfo.room}_${modalInfo.start}`;
+    const newData = { ...surgeryData };
+    delete newData[key];
+    setSurgeryData(newData);
     setModalInfo(null);
   };
 
   const handlePrev = () => setSelectedDate((prev) => prev.subtract(1, "day"));
   const handleNext = () => setSelectedDate((prev) => prev.add(1, "day"));
+
+  useEffect(() => {
+    const fetchSurgeryData = async () => {
+      const q = query(
+        collection(db, "surgerySchedules"),
+        where("date", "==", selectedDate.format("YYYY-MM-DD"))
+      );
+      const querySnapshot = await getDocs(q);
+
+      const loadedData = {};
+      querySnapshot.forEach((doc) => {
+        const d = doc.data();
+        const key = `${d.date}_${d.room}_${d.start}`;
+        loadedData[key] = { ...d, docId: doc.id };
+      });
+
+      setSurgeryData(loadedData);
+    };
+
+    fetchSurgeryData();
+  }, [selectedDate]);
 
   return (
     <div style={{ padding: "1rem" }}>
@@ -60,24 +128,53 @@ function SurgeryRequest() {
                 <tr key={orNumber}>
                   <td className="sr-room">{orNumber}</td>
                   {Array.from({ length: 24 }, (_, hour) => {
-                    const key = `${selectedDate.format("YYYY-MM-DD")}_${orNumber}_${hour}`;
+                    const targetTime = `${String(hour).padStart(2, "0")}:00`;
+                    const key = `${selectedDate.format("YYYY-MM-DD")}_${orNumber}_${targetTime}`;
                     const surgery = surgeryData[key];
+
+                    // すでにバーでカバーされてる時間帯ならスキップ
+                    const isCovered = Object.values(surgeryData).some(s => {
+                      if (s.room !== orNumber) return false;
+                      const start = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.start}`);
+                      const end = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.end}`);
+                      const current = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${targetTime}`);
+                      return current.isAfter(start) && current.isBefore(end);
+                    });
+                    if (isCovered && !surgery) return null;
+
+                    if (surgery) {
+                      const startHour = parseInt(surgery.start.split(":")[0]);
+                      const endHour = parseInt(surgery.end.split(":")[0]);
+                      const span = endHour - startHour;
+
+                      return (
+                        <td
+                          key={hour}
+                          colSpan={span}
+                          onClick={() => openModal(orNumber, startHour, surgery)}
+                          style={{
+                            backgroundColor: "#d0ebff",
+                            border: "1px solid #87c4ff",
+                            padding: "4px",
+                            fontSize: "0.7rem",
+                            textAlign: "left"
+                          }}
+                        >
+                          <strong>{surgery.procedure}</strong><br />
+                          {surgery.surgeon}<br />
+                          {surgery.position}<br />
+                          {surgery.anesthesia}<br />
+                          {surgery.start}~{surgery.end}
+                        </td>
+                      );
+                    }
+
                     return (
                       <td
                         key={hour}
                         className="sr-cell"
                         onClick={() => openModal(orNumber, hour)}
-                      >
-                        {surgery ? (
-                          <div style={{ textAlign: "left", fontSize: "0.7rem" }}>
-                            <strong>{surgery.procedure}</strong><br />
-                            {surgery.surgeon}<br />
-                            {surgery.position}<br />
-                            {surgery.anesthesia}<br />
-                            {surgery.start}~{surgery.end}
-                          </div>
-                        ) : null}
-                      </td>
+                      />
                     );
                   })}
                 </tr>
@@ -128,8 +225,27 @@ function SurgeryRequest() {
               />
             </div>
             <div style={{ textAlign: "right", marginTop: "1rem" }}>
-              <button onClick={saveSurgery}>保存</button>
-              <button onClick={closeModal} className="sr-close">キャンセル</button>
+              {modalInfo.docId && (
+                <button
+                  onClick={handleDelete}
+                  style={{
+                    marginRight: "0.5rem",
+                    background: "#f66",
+                    color: "#fff",
+                    border: "none",
+                    padding: "0.5rem 1rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  削除
+                </button>
+              )}
+              <button onClick={saveSurgery} style={{ marginRight: "0.5rem" }}>
+                保存
+              </button>
+              <button onClick={closeModal} className="sr-close">
+                キャンセル
+              </button>
             </div>
           </div>
         </div>
