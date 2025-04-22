@@ -5,6 +5,7 @@ import { db } from "../firebase";
 import { getDocs, collection } from "firebase/firestore";
 import "./SurgeryRequest.css";
 import OperatingRoomRow from "./OperatingRoomRow";
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 function SurgeryRequest() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
@@ -13,6 +14,7 @@ function SurgeryRequest() {
   const [departments, setDepartments] = useState([]);
   const [procedures, setProcedures] = useState([]);
   const scrollRef = useRef(null);
+  const orScrollParentRef = useRef(null);
 
   const todayStr = useMemo(() => selectedDate.format("YYYY-MM-DD"), [selectedDate]);
 
@@ -28,7 +30,7 @@ function SurgeryRequest() {
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollLeft = 1440;
+      scrollRef.current.scrollLeft = 1440; // scroll to 9:00
     }
   }, []);
 
@@ -76,7 +78,22 @@ function SurgeryRequest() {
     (p) => p.departmentId === modalInfo?.department
   );
 
-  const surgeryEntries = useMemo(() => Object.entries(surgeryData), [surgeryData]);
+  const surgeryMap = useMemo(() => {
+    const map = new Map();
+    for (const [key, value] of Object.entries(surgeryData)) {
+      const [_, room, time] = key.split("_");
+      if (!map.has(room)) map.set(room, new Map());
+      map.get(room).set(time, value);
+    }
+    return map;
+  }, [surgeryData]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: 20,
+    getScrollElement: () => orScrollParentRef.current,
+    estimateSize: () => 82,
+    overscan: 5,
+  });
 
   return (
     <div style={{ padding: "1rem" }}>
@@ -91,35 +108,59 @@ function SurgeryRequest() {
       </div>
 
       <div ref={scrollRef} className="sr-container">
-        <table className="sr-table">
-          <thead>
-            <tr>
-              <th>部屋</th>
-              {Array.from({ length: 96 }, (_, i) => {
-                const hour = Math.floor(i / 4);
-                const min = (i % 4) * 15;
-                return (
-                  <th key={i}>{min === 0 ? `${hour}:00` : ""}</th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: 20 }, (_, or) => {
-              const orNumber = `OR${or + 1}`;
+        <div style={{ display: "flex", paddingLeft: 60 }}>
+          <div style={{ width: 60 }}></div>
+          {Array.from({ length: 96 }, (_, i) => {
+            const hour = Math.floor(i / 4);
+            const min = (i % 4) * 15;
+            return (
+              <div
+                key={i}
+                style={{
+                  width: 40,
+                  textAlign: "center",
+                  fontSize: "0.75rem",
+                  color: "#666"
+                }}
+              >
+                {min === 0 ? `${hour}:00` : ""}
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          ref={orScrollParentRef}
+          style={{ overflowY: "auto", height: "800px", position: "relative" }}
+        >
+          <div
+            style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const orNumber = `OR${virtualRow.index + 1}`;
               return (
-                <OperatingRoomRow
+                <div
                   key={orNumber}
-                  orNumber={orNumber}
-                  todayStr={todayStr}
-                  surgeryData={surgeryData}
-                  surgeryEntries={surgeryEntries}
-                  openModal={openModal}
-                />
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    transform: `translateY(${virtualRow.start}px)`,
+                    height: `${virtualRow.size}px`,
+                    width: "100%",
+                  }}
+                >
+                  <OperatingRoomRow
+                    orNumber={orNumber}
+                    todayStr={todayStr}
+                    surgeryMap={surgeryMap}
+                    openModal={openModal}
+                  />
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
 
       {modalInfo && (
@@ -136,7 +177,7 @@ function SurgeryRequest() {
 
             <select value={modalInfo.procedure} onChange={(e) => setModalInfo({ ...modalInfo, procedure: e.target.value })} className="sr-input">
               <option value="">術式を選択</option>
-              {filteredProcedures.map((proc) => (
+              {procedures.filter(p => p.departmentId === modalInfo.department).map((proc) => (
                 <option key={proc.id} value={proc.name}>{proc.name}</option>
               ))}
             </select>
