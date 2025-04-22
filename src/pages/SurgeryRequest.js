@@ -22,6 +22,8 @@ function SurgeryRequest() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [modalInfo, setModalInfo] = useState(null);
   const [surgeryData, setSurgeryData] = useState({});
+  const [departments, setDepartments] = useState([]);
+  const [procedures, setProcedures] = useState([]);
 
   const openModal = (room, hour, existingData = null) => {
     if (existingData) {
@@ -30,6 +32,7 @@ function SurgeryRequest() {
       setModalInfo({
         room,
         hour,
+        department: "",
         procedure: "",
         surgeon: "",
         position: "",
@@ -100,6 +103,16 @@ function SurgeryRequest() {
     fetchSurgeryData();
   }, [selectedDate]);
 
+  useEffect(() => {
+    const fetchMaster = async () => {
+      const deptSnap = await getDocs(collection(db, "departments"));
+      const procSnap = await getDocs(collection(db, "procedures"));
+      setDepartments(deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setProcedures(procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    };
+    fetchMaster();
+  }, []);
+
   return (
     <div style={{ padding: "1rem" }}>
       <Header />
@@ -132,7 +145,6 @@ function SurgeryRequest() {
                     const key = `${selectedDate.format("YYYY-MM-DD")}_${orNumber}_${targetTime}`;
                     const surgery = surgeryData[key];
 
-                    // すでにバーでカバーされてる時間帯ならスキップ
                     const isCovered = Object.values(surgeryData).some(s => {
                       if (s.room !== orNumber) return false;
                       const start = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.start}`);
@@ -188,12 +200,46 @@ function SurgeryRequest() {
         <div className="sr-modal-backdrop" onClick={closeModal}>
           <div className="sr-modal" onClick={(e) => e.stopPropagation()}>
             <h3>{modalInfo.room} - {modalInfo.start}</h3>
-            <input
+
+            <select
               className="sr-input"
-              placeholder="術式名"
+              value={modalInfo.department}
+              onChange={(e) =>
+                setModalInfo({
+                  ...modalInfo,
+                  department: e.target.value,
+                  procedure: "", // 診療科変わったらリセット
+                })
+              }
+            >
+              <option value="">診療科を選択</option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="sr-input"
               value={modalInfo.procedure}
-              onChange={(e) => setModalInfo({ ...modalInfo, procedure: e.target.value })}
-            />
+              onChange={(e) =>
+                setModalInfo({
+                  ...modalInfo,
+                  procedure: e.target.value,
+                })
+              }
+            >
+              <option value="">術式を選択</option>
+              {procedures
+                .filter((p) => p.departmentId === modalInfo.department)
+                .map((proc) => (
+                  <option key={proc.id} value={proc.name}>
+                    {proc.name}
+                  </option>
+                ))}
+            </select>
+
             <input
               className="sr-input"
               placeholder="執刀医"
