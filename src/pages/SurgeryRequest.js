@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import dayjs from "dayjs";
 import Header from "../components/ui/Header";
 import { db } from "../firebase";
 import { getDocs, collection } from "firebase/firestore";
 import "./SurgeryRequest.css";
+import OperatingRoomRow from "./OperatingRoomRow";
 
 function SurgeryRequest() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
@@ -12,6 +13,8 @@ function SurgeryRequest() {
   const [departments, setDepartments] = useState([]);
   const [procedures, setProcedures] = useState([]);
   const scrollRef = useRef(null);
+
+  const todayStr = useMemo(() => selectedDate.format("YYYY-MM-DD"), [selectedDate]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -25,7 +28,7 @@ function SurgeryRequest() {
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollLeft = 720;
+      scrollRef.current.scrollLeft = 1440;
     }
   }, []);
 
@@ -61,17 +64,19 @@ function SurgeryRequest() {
   const closeModal = () => setModalInfo(null);
 
   const saveSurgery = () => {
-    const key = `${selectedDate.format("YYYY-MM-DD")}_${modalInfo.room}_${modalInfo.start}`;
-    setSurgeryData({
-      ...surgeryData,
+    const key = `${todayStr}_${modalInfo.room}_${modalInfo.start}`;
+    setSurgeryData(prev => ({
+      ...prev,
       [key]: modalInfo,
-    });
+    }));
     setModalInfo(null);
   };
 
   const filteredProcedures = procedures.filter(
     (p) => p.departmentId === modalInfo?.department
   );
+
+  const surgeryEntries = useMemo(() => Object.entries(surgeryData), [surgeryData]);
 
   return (
     <div style={{ padding: "1rem" }}>
@@ -90,68 +95,27 @@ function SurgeryRequest() {
           <thead>
             <tr>
               <th>部屋</th>
-              {Array.from({ length: 96 }, (_, i) => (
-                <th key={i}>{Math.floor(i / 4)}:{(i % 4) * 15 === 0 ? "00" : (i % 4) * 15}</th>
-              ))}
+              {Array.from({ length: 96 }, (_, i) => {
+                const hour = Math.floor(i / 4);
+                const min = (i % 4) * 15;
+                return (
+                  <th key={i}>{min === 0 ? `${hour}:00` : ""}</th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {Array.from({ length: 20 }, (_, or) => {
               const orNumber = `OR${or + 1}`;
               return (
-                <tr key={or}>
-                  <td className="sr-room" style={{ height: "80px" }}>{orNumber}</td>
-                  {Array.from({ length: 96 }, (_, quarter) => {
-                    const hour = Math.floor(quarter / 4);
-                    const min = (quarter % 4) * 15;
-                    const currentKey = `${selectedDate.format("YYYY-MM-DD")}_${orNumber}_${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
-                    const surgery = Object.values(surgeryData).find(s =>
-                      s.room === orNumber &&
-                      selectedDate.format("YYYY-MM-DD") === selectedDate.format("YYYY-MM-DD") &&
-                      s.start === `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`
-                    );
-
-                    const isRunning = Object.values(surgeryData).some(s => {
-                      if (s.room !== orNumber) return false;
-                      const sStart = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.start}`);
-                      const sEnd = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.end}`);
-                      const t = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
-                      return t.isAfter(sStart.subtract(1, 'minute')) && t.isBefore(sEnd);
-                    });
-
-                    if (surgery) {
-                      const start = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${surgery.start}`);
-                      const end = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${surgery.end}`);
-                      const span = end.diff(start, "minute") / 15;
-                      return (
-                        <td
-                          key={quarter}
-                          colSpan={span}
-                          style={{
-                            background: "#d0ebff",
-                            border: "1px solid #87c4ff",
-                            minWidth: `${40 * span}px`,
-                            fontSize: "0.7rem",
-                            whiteSpace: "pre-line",
-                            lineHeight: 1.3,
-                            padding: "4px",
-                            cursor: "pointer",
-                            height: "80px",
-                            verticalAlign: "top"
-                          }}
-                          onClick={() => openModal(orNumber, quarter)}
-                        >
-                          <div style={{ fontWeight: "bold", fontSize: "0.85rem" }}>{surgery.procedure}</div>
-                          {`${surgery.start}〜${surgery.end}\n${surgery.surgeon}\n${surgery.position}\n${surgery.anesthesia}`}
-                        </td>
-                      );
-                    } else if (isRunning) {
-                      return null;
-                    } else {
-                      return <td key={quarter} className="sr-cell" style={{ height: "80px" }} onClick={() => openModal(orNumber, quarter)} />;
-                    }
-                  })}
-                </tr>
+                <OperatingRoomRow
+                  key={orNumber}
+                  orNumber={orNumber}
+                  todayStr={todayStr}
+                  surgeryData={surgeryData}
+                  surgeryEntries={surgeryEntries}
+                  openModal={openModal}
+                />
               );
             })}
           </tbody>
@@ -161,7 +125,7 @@ function SurgeryRequest() {
       {modalInfo && (
         <div className="sr-modal-backdrop" onClick={closeModal}>
           <div className="sr-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginBottom: "1rem" }}>{selectedDate.format("YYYY-MM-DD")} {modalInfo.room} / {modalInfo.start}</h3>
+            <h3 style={{ marginBottom: "1rem" }}>{todayStr} {modalInfo.room} / {modalInfo.start}</h3>
 
             <select value={modalInfo.department} onChange={(e) => setModalInfo({ ...modalInfo, department: e.target.value, procedure: "" })} className="sr-input">
               <option value="">診療科を選択</option>
