@@ -1,11 +1,11 @@
+
 import React, { useState, useEffect } from "react";
 import dayjs from "dayjs";
+import Select from "react-select";
 import Header from "../components/ui/Header";
 import "./SurgeryRequest.css";
 
-import {
-  db
-} from "../firebase";
+import { db } from "../firebase";
 import {
   collection,
   addDoc,
@@ -32,8 +32,10 @@ function SurgeryRequest() {
       setModalInfo({
         room,
         hour,
+        procedureFreeText: "",
+        procedureIds: [],
+        requiredType: "AND",
         department: "",
-        procedure: "",
         surgeon: "",
         position: "",
         anesthesia: "",
@@ -113,6 +115,12 @@ function SurgeryRequest() {
     fetchMaster();
   }, []);
 
+  const procedureOptions = procedures.map((proc) => ({
+    value: proc.id,
+    label: proc.name,
+    departmentId: proc.departmentId,
+  }));
+
   return (
     <div style={{ padding: "1rem" }}>
       <Header />
@@ -172,7 +180,7 @@ function SurgeryRequest() {
                             textAlign: "left"
                           }}
                         >
-                          <strong>{surgery.procedure}</strong><br />
+                          <strong>{surgery.procedureFreeText}</strong><br />
                           {surgery.surgeon}<br />
                           {surgery.position}<br />
                           {surgery.anesthesia}<br />
@@ -201,43 +209,59 @@ function SurgeryRequest() {
           <div className="sr-modal" onClick={(e) => e.stopPropagation()}>
             <h3>{modalInfo.room} - {modalInfo.start}</h3>
 
-            <select
+            <input
               className="sr-input"
-              value={modalInfo.department}
-              onChange={(e) =>
-                setModalInfo({
-                  ...modalInfo,
-                  department: e.target.value,
-                  procedure: "", // 診療科変わったらリセット
-                })
-              }
-            >
-              <option value="">診療科を選択</option>
-              {departments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
+              placeholder="術式名（自由入力）"
+              value={modalInfo.procedureFreeText || ""}
+              onChange={(e) => setModalInfo({ ...modalInfo, procedureFreeText: e.target.value })}
+            />
 
-            <select
-              className="sr-input"
-              value={modalInfo.procedure}
-              onChange={(e) =>
+            <label style={{ fontSize: "0.8rem" }}>この手術に配置可能なスキル</label>
+            <label style={{ fontSize: "0.8rem" }}>診療科を選択</label>
+<select
+  className="sr-input"
+  value={modalInfo.department}
+  onChange={(e) =>
+    setModalInfo({
+      ...modalInfo,
+      department: e.target.value,    
+    })
+  }
+>
+  <option value="">-- 診療科を選択 --</option>
+  {departments.map((dept) => (
+    <option key={dept.id} value={dept.id}>
+      {dept.name}
+    </option>
+  ))}
+</select>
+
+            <Select
+              isMulti
+              options={procedureOptions.filter(opt =>
+                opt.departmentId === modalInfo.department
+              )}
+              value={procedureOptions.filter((opt) =>
+                modalInfo.procedureIds?.includes(opt.value)
+              )}
+              onChange={(selected) =>
                 setModalInfo({
                   ...modalInfo,
-                  procedure: e.target.value,
+                  procedureIds: selected.map((opt) => opt.value),
                 })
               }
+            />
+
+            <label style={{ fontSize: "0.8rem" }}>判定条件</label>
+            <select
+              className="sr-input"
+              value={modalInfo.requiredType || "AND"}
+              onChange={(e) =>
+                setModalInfo({ ...modalInfo, requiredType: e.target.value })
+              }
             >
-              <option value="">術式を選択</option>
-              {procedures
-                .filter((p) => p.departmentId === modalInfo.department)
-                .map((proc) => (
-                  <option key={proc.id} value={proc.name}>
-                    {proc.name}
-                  </option>
-                ))}
+              <option value="AND">すべて必要 (AND)</option>
+              <option value="OR">いずれかで可 (OR)</option>
             </select>
 
             <input
@@ -270,6 +294,7 @@ function SurgeryRequest() {
                 onChange={(e) => setModalInfo({ ...modalInfo, end: e.target.value })}
               />
             </div>
+
             <div style={{ textAlign: "right", marginTop: "1rem" }}>
               {modalInfo.docId && (
                 <button

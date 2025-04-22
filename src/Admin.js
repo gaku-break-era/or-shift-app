@@ -298,9 +298,13 @@ setEvents(eventMap);
   
   console.log("現在のユーザー:", currentUser?.email);
 
-  if (currentUser.email !== "kwshrk@gmail.com,fuyumi.gemba@marianna-u.ac.jp") {
-    return <p style={{ padding: "2rem", fontWeight: "bold", color: "red" }}>アクセス権がありません</p>;
+  if (!currentUser) {
+    return <p>ログイン中のユーザーを確認しています...</p>;
   }
+  
+  // ✅ 誰でもアクセス可能に一時変更（あとでメール制限を戻すこと）
+  console.log("現在のユーザー:", currentUser?.email);
+  
   
   return (
     <div style={{ padding: "1rem", fontFamily: "sans-serif", overflowX: "scroll" }}>
