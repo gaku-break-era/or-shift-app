@@ -9,35 +9,38 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import Header from "../components/ui/Header";
+import Select from "react-select";
 import "./ProcedureMaster.css";
 
 function ProcedureMaster() {
   const [departments, setDepartments] = useState([]);
   const [procedures, setProcedures] = useState([]);
+  const [procedureOptions, setProcedureOptions] = useState([]);
 
   const [showDeptModal, setShowDeptModal] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
   const [editingDept, setEditingDept] = useState(null);
 
-  const [newProcedure, setNewProcedure] = useState({ name: "", departmentId: "" });
-  const [editingProc, setEditingProc] = useState(null);
-
   const [showProcModal, setShowProcModal] = useState(false);
+  const [editingProc, setEditingProc] = useState(null);
+  const [newProcedure, setNewProcedure] = useState({
+    name: "",
+    departmentId: "",
+    requiredRoles: [],
+  });
 
   useEffect(() => {
-    fetchDepartments();
-    fetchProcedures();
+    const fetchData = async () => {
+      const deptSnap = await getDocs(collection(db, "departments"));
+      const procSnap = await getDocs(collection(db, "procedures"));
+      const depts = deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const procs = procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setDepartments(depts);
+      setProcedures(procs);
+      setProcedureOptions(procs.map(p => ({ label: p.name, value: p.id })));
+    };
+    fetchData();
   }, []);
-
-  const fetchDepartments = async () => {
-    const snapshot = await getDocs(collection(db, "departments"));
-    setDepartments(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-  };
-
-  const fetchProcedures = async () => {
-    const snapshot = await getDocs(collection(db, "procedures"));
-    setProcedures(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-  };
 
   const handleAddOrUpdateDepartment = async () => {
     if (!newDeptName.trim()) return;
@@ -49,109 +52,78 @@ function ProcedureMaster() {
     setNewDeptName("");
     setEditingDept(null);
     setShowDeptModal(false);
-    fetchDepartments();
-  };
 
-  const handleDeleteDepartment = async (id) => {
-    if (window.confirm("本当に削除しますか？")) {
-      await deleteDoc(doc(db, "departments", id));
-      fetchDepartments();
-    }
+    const snapshot = await getDocs(collection(db, "departments"));
+    setDepartments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   };
 
   const handleAddOrUpdateProcedure = async () => {
     if (!newProcedure.name || !newProcedure.departmentId) return;
+
     if (editingProc) {
       await updateDoc(doc(db, "procedures", editingProc.id), newProcedure);
     } else {
       await addDoc(collection(db, "procedures"), newProcedure);
     }
-    setNewProcedure({ name: "", departmentId: "" });
+
+    setNewProcedure({ name: "", departmentId: "", requiredRoles: [] });
     setEditingProc(null);
     setShowProcModal(false);
-    fetchProcedures();
+
+    const snapshot = await getDocs(collection(db, "procedures"));
+    setProcedures(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   };
 
   const handleDeleteProcedure = async (id) => {
     if (window.confirm("本当に削除しますか？")) {
       await deleteDoc(doc(db, "procedures", id));
-      fetchProcedures();
+      const snapshot = await getDocs(collection(db, "procedures"));
+      setProcedures(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }
   };
 
-  const handleDownloadTemplate = () => {
-    const csvContent = "name,departmentName\n術式A,消化器外科\n術式B,整形外科";
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "procedure_template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const addRequiredRole = () => {
+    setNewProcedure(prev => ({
+      ...prev,
+      requiredRoles: [...prev.requiredRoles, {
+        type: "scrub",
+        count: 1,
+        skills: [],
+        label: ""
+      }],
+    }));
   };
 
-  const handleCsvUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const updateRequiredRole = (idx, key, value) => {
+    const updated = [...newProcedure.requiredRoles];
+    updated[idx][key] = value;
+    setNewProcedure(prev => ({ ...prev, requiredRoles: updated }));
+  };
 
-    const text = await file.text();
-    const lines = text.split("\n").slice(1); // skip header
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-
-      const parts = line.split(",");
-      if (parts.length < 2) continue;
-
-      const name = parts[0]?.trim();
-      const departmentName = parts[1]?.trim();
-
-      const dept = departments.find((d) => d.name.trim() === departmentName);
-      if (dept && name) {
-        await addDoc(collection(db, "procedures"), {
-          name,
-          departmentId: dept.id,
-        });
-      }
-    }
-    alert("CSVから術式を登録しました。");
-    fetchProcedures();
+  const removeRequiredRole = (idx) => {
+    const updated = [...newProcedure.requiredRoles];
+    updated.splice(idx, 1);
+    setNewProcedure(prev => ({ ...prev, requiredRoles: updated }));
   };
 
   return (
     <div className="procedure-master-container">
       <Header />
-      <h2 className="section-title">🩺 登録済みの診療科</h2>
+      <h2 className="section-title">📋 登録済みの診療科</h2>
 
-      <button className="add-btn" onClick={() => setShowDeptModal(true)}>
-        ＋ 診療科を追加する
-      </button>
+      <button className="add-btn" onClick={() => setShowDeptModal(true)}>＋ 診療科を追加する</button>
 
       <div className="table-wrapper">
         <table className="master-table">
           <thead>
             <tr>
               <th>診療科名</th>
-              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {departments.map((dept) => (
               <tr key={dept.id}>
                 <td>{dept.name}</td>
-                <td>
-                  <button
-                    onClick={() => {
-                      setEditingDept(dept);
-                      setNewDeptName(dept.name);
-                      setShowDeptModal(true);
-                    }}
-                  >
-                    編集
-                  </button>
-                  <button onClick={() => handleDeleteDepartment(dept.id)}>削除</button>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -159,24 +131,9 @@ function ProcedureMaster() {
       </div>
 
       <h2 className="section-title">🛠 術式マスター</h2>
-      <div className="flex-row">
-        <button className="add-btn" onClick={() => setShowProcModal(true)}>
-          ＋ 術式を追加する
-        </button>
-        <button className="add-btn" onClick={handleDownloadTemplate}>
-          📥 CSVテンプレートをダウンロード
-        </button>
-        <button className="add-btn" onClick={() => document.getElementById('csvUpload').click()}>
-          📤 CSVファイルをアップロード
-        </button>
-        <input
-          id="csvUpload"
-          type="file"
-          accept=".csv"
-          onChange={handleCsvUpload}
-          style={{ display: "none" }}
-        />
-      </div>
+      <button className="add-btn" onClick={() => setShowProcModal(true)}>
+        ＋ 術式を追加する
+      </button>
 
       <div className="table-wrapper">
         <table className="master-table">
@@ -193,15 +150,15 @@ function ProcedureMaster() {
                 <td>{proc.name}</td>
                 <td>{departments.find((d) => d.id === proc.departmentId)?.name || "不明"}</td>
                 <td>
-                  <button
-                    onClick={() => {
-                      setEditingProc(proc);
-                      setNewProcedure({ name: proc.name, departmentId: proc.departmentId });
-                      setShowProcModal(true);
-                    }}
-                  >
-                    編集
-                  </button>
+                  <button onClick={() => {
+                    setEditingProc(proc);
+                    setNewProcedure({
+                      name: proc.name,
+                      departmentId: proc.departmentId,
+                      requiredRoles: proc.requiredRoles || [],
+                    });
+                    setShowProcModal(true);
+                  }}>編集</button>
                   <button onClick={() => handleDeleteProcedure(proc.id)}>削除</button>
                 </td>
               </tr>
@@ -216,16 +173,11 @@ function ProcedureMaster() {
           <div className="modal">
             <div className="modal-header">
               <h3>{editingDept ? "診療科を編集" : "診療科を追加"}</h3>
-              <button
-                className="close-btn"
-                onClick={() => {
-                  setShowDeptModal(false);
-                  setEditingDept(null);
-                  setNewDeptName("");
-                }}
-              >
-                ×
-              </button>
+              <button className="close-btn" onClick={() => {
+                setShowDeptModal(false);
+                setEditingDept(null);
+                setNewDeptName("");
+              }}>×</button>
             </div>
             <input
               type="text"
@@ -234,9 +186,7 @@ function ProcedureMaster() {
               onChange={(e) => setNewDeptName(e.target.value)}
               className="input-field"
             />
-            <button className="save-btn" onClick={handleAddOrUpdateDepartment}>
-              登録する
-            </button>
+            <button className="save-btn" onClick={handleAddOrUpdateDepartment}>登録する</button>
           </div>
         </div>
       )}
@@ -247,26 +197,23 @@ function ProcedureMaster() {
           <div className="modal">
             <div className="modal-header">
               <h3>{editingProc ? "術式を編集" : "術式を追加"}</h3>
-              <button
-                className="close-btn"
-                onClick={() => {
-                  setShowProcModal(false);
-                  setEditingProc(null);
-                  setNewProcedure({ name: "", departmentId: "" });
-                }}
-              >
-                ×
-              </button>
+              <button className="close-btn" onClick={() => {
+                setShowProcModal(false);
+                setEditingProc(null);
+                setNewProcedure({ name: "", departmentId: "", requiredRoles: [] });
+              }}>×</button>
             </div>
+
             <input
               type="text"
-              placeholder="術式名を入力"
+              placeholder="術式名"
               value={newProcedure.name}
               onChange={(e) =>
                 setNewProcedure({ ...newProcedure, name: e.target.value })
               }
               className="input-field"
             />
+
             <select
               value={newProcedure.departmentId}
               onChange={(e) =>
@@ -281,9 +228,59 @@ function ProcedureMaster() {
                 </option>
               ))}
             </select>
-            <button className="save-btn" onClick={handleAddOrUpdateProcedure}>
-              登録する
-            </button>
+
+            <h4 style={{ marginTop: "1rem" }}>🔧 必要人員（役割・スキル条件）</h4>
+            {newProcedure.requiredRoles.map((role, idx) => (
+              <div key={idx} style={{ marginBottom: "1rem" }}>
+                <input
+                  type="text"
+                  placeholder="ラベル（例: 消化器側）"
+                  value={role.label}
+                  onChange={(e) => updateRequiredRole(idx, "label", e.target.value)}
+                  style={{ marginBottom: "0.5rem", width: "60%" }}
+                />
+                <select
+                  value={role.type}
+                  onChange={(e) => updateRequiredRole(idx, "type", e.target.value)}
+                  style={{ marginRight: "0.5rem" }}
+                >
+                  <option value="scrub">器械出し</option>
+                  <option value="circulating">外回り</option>
+                  <option value="assistant">助手</option>
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  value={role.count}
+                  onChange={(e) =>
+                    updateRequiredRole(idx, "count", parseInt(e.target.value))
+                  }
+                  style={{ width: "60px", marginRight: "0.5rem" }}
+                />
+                <Select
+                  isMulti
+                  options={procedureOptions}
+                  value={procedureOptions.filter((o) =>
+                    role.skills?.includes(o.value)
+                  )}
+                  onChange={(selected) =>
+                    updateRequiredRole(
+                      idx,
+                      "skills",
+                      selected.map((s) => s.value)
+                    )
+                  }
+                  placeholder="このポジションに必要なスキル"
+                  styles={{ container: base => ({ ...base, width: "60%" }) }}
+                />
+                <button onClick={() => removeRequiredRole(idx)} style={{ marginLeft: "0.5rem" }}>削除</button>
+              </div>
+            ))}
+            <button onClick={addRequiredRole} style={{ marginTop: "0.5rem" }}>＋ 看護師追加</button>
+
+            <div style={{ textAlign: "right", marginTop: "1.5rem" }}>
+              <button className="save-btn" onClick={handleAddOrUpdateProcedure}>保存する</button>
+            </div>
           </div>
         </div>
       )}
