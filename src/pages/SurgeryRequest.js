@@ -1,62 +1,97 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dayjs from "dayjs";
 import Header from "../components/ui/Header";
+import { db } from "../firebase";
+import { getDocs, collection } from "firebase/firestore";
+import "./SurgeryRequest.css";
 
 function SurgeryRequest() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
-  const [modalInfo, setModalInfo] = useState(null); // {room, hour}
-  const [surgeryData, setSurgeryData] = useState({}); // {date-room-hour: {...}}
+  const [modalInfo, setModalInfo] = useState(null);
+  const [surgeryData, setSurgeryData] = useState({});
+  const [departments, setDepartments] = useState([]);
+  const [procedures, setProcedures] = useState([]);
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const deptSnap = await getDocs(collection(db, "departments"));
+      const procSnap = await getDocs(collection(db, "procedures"));
+      setDepartments(deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setProcedures(procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = 720;
+    }
+  }, []);
+
+  const scrollToCurrentHour = () => {
+    const now = dayjs();
+    const quarter = now.hour() * 4 + Math.floor(now.minute() / 15);
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = quarter * 40;
+    }
+  };
 
   const handlePrev = () => setSelectedDate(prev => prev.subtract(1, "day"));
   const handleNext = () => setSelectedDate(prev => prev.add(1, "day"));
 
-  const openModal = (room, hour) => {
+  const openModal = (room, quarter) => {
+    const hour = Math.floor(quarter / 4);
+    const minutes = (quarter % 4) * 15;
+    const start = dayjs().hour(hour).minute(minutes).format("HH:mm");
+    const end = dayjs().hour(hour).minute(minutes + 15).format("HH:mm");
     setModalInfo({
       room,
-      hour,
+      quarter,
       department: "",
       procedure: "",
       surgeon: "",
-      start: `${String(hour).padStart(2, "0")}:00`,
-      end: `${String(hour + 1).padStart(2, "0")}:00`,
+      anesthesia: "",
+      position: "",
+      start,
+      end,
     });
   };
 
   const closeModal = () => setModalInfo(null);
 
   const saveSurgery = () => {
-    const key = `${selectedDate.format("YYYY-MM-DD")}_${modalInfo.room}_${modalInfo.hour}`;
+    const key = `${selectedDate.format("YYYY-MM-DD")}_${modalInfo.room}_${modalInfo.start}`;
     setSurgeryData({
       ...surgeryData,
-      [key]: modalInfo
+      [key]: modalInfo,
     });
     setModalInfo(null);
   };
 
-  return (
-    <div style={{ padding: "1rem", fontFamily: "sans-serif" }}>
-      <Header />
-      <h2 style={{ textAlign: "center", marginBottom: "1rem" }}>📝 手術申し込み画面</h2>
+  const filteredProcedures = procedures.filter(
+    (p) => p.departmentId === modalInfo?.department
+  );
 
-      {/* 日付切り替え */}
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
+  return (
+    <div style={{ padding: "1rem" }}>
+      <Header />
+      <h2 className="sr-title">📝 手術申し込み画面</h2>
+
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
         <button onClick={handlePrev}>◀ 前日</button>
-        <strong style={{ fontSize: "1.2rem" }}>
-          {selectedDate.format("YYYY年MM月DD日 (ddd)")}
-        </strong>
+        <strong style={{ fontSize: "1.2rem" }}>{selectedDate.format("YYYY年MM月DD日 (ddd)")}</strong>
         <button onClick={handleNext}>翌日 ▶</button>
+        <button onClick={scrollToCurrentHour}>🕒 現在時刻へ</button>
       </div>
 
-      {/* OR × 時間テーブル */}
-      <div style={{ overflowX: "scroll", border: "1px solid #ccc", padding: "1rem" }}>
-        <table style={{ minWidth: "2000px", borderCollapse: "collapse", width: "100%" }}>
+      <div ref={scrollRef} className="sr-container">
+        <table className="sr-table">
           <thead>
             <tr>
-              <th style={{ position: "sticky", left: 0, background: "#fff", border: "1px solid #ccc", padding: "4px" }}>部屋</th>
-              {Array.from({ length: 24 }, (_, i) => (
-                <th key={i} style={{ border: "1px solid #ccc", padding: "4px", minWidth: "80px" }}>
-                  {i}:00
-                </th>
+              <th>部屋</th>
+              {Array.from({ length: 96 }, (_, i) => (
+                <th key={i}>{Math.floor(i / 4)}:{(i % 4) * 15 === 0 ? "00" : (i % 4) * 15}</th>
               ))}
             </tr>
           </thead>
@@ -65,64 +100,57 @@ function SurgeryRequest() {
               const orNumber = `OR${or + 1}`;
               return (
                 <tr key={or}>
-                  <td style={{ position: "sticky", left: 0, background: "#f9f9f9", border: "1px solid #ccc", padding: "4px" }}>
-                    {orNumber}
-                  </td>
-                  {Array.from({ length: 24 }, (_, hour) => {
-  const key = `${selectedDate.format("YYYY-MM-DD")}_${orNumber}_${hour}`;
-  const surgery = Object.values(surgeryData).find(s =>
-    s.room === orNumber &&
-    selectedDate.format("YYYY-MM-DD") === key.split("_")[0] &&
-    parseInt(s.start.split(":")[0]) === hour
-  );
+                  <td className="sr-room" style={{ height: "80px" }}>{orNumber}</td>
+                  {Array.from({ length: 96 }, (_, quarter) => {
+                    const hour = Math.floor(quarter / 4);
+                    const min = (quarter % 4) * 15;
+                    const currentKey = `${selectedDate.format("YYYY-MM-DD")}_${orNumber}_${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+                    const surgery = Object.values(surgeryData).find(s =>
+                      s.room === orNumber &&
+                      selectedDate.format("YYYY-MM-DD") === selectedDate.format("YYYY-MM-DD") &&
+                      s.start === `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`
+                    );
 
-  const isSurgeryRunning = Object.values(surgeryData).some(s =>
-    s.room === orNumber &&
-    selectedDate.format("YYYY-MM-DD") === key.split("_")[0] &&
-    parseInt(s.start.split(":")[0]) < hour &&
-    parseInt(s.end.split(":")[0]) > hour
-  );
+                    const isRunning = Object.values(surgeryData).some(s => {
+                      if (s.room !== orNumber) return false;
+                      const sStart = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.start}`);
+                      const sEnd = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.end}`);
+                      const t = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
+                      return t.isAfter(sStart.subtract(1, 'minute')) && t.isBefore(sEnd);
+                    });
 
-  if (surgery) {
-    const start = parseInt(surgery.start.split(":")[0]);
-    const end = parseInt(surgery.end.split(":")[0]);
-    const span = end - start;
-
-    return (
-      <td
-        key={hour}
-        colSpan={span}
-        style={{
-          background: "#d0ebff",
-          border: "1px solid #87c4ff",
-          minWidth: `${80 * span}px`,
-          position: "relative",
-          fontSize: "0.75rem",
-          cursor: "pointer"
-        }}
-        onClick={() => openModal(orNumber, hour)}
-      >
-        {surgery.procedure}（{surgery.start}〜{surgery.end}）
-      </td>
-    );
-  } else if (isSurgeryRunning) {
-    return null; // スキップ：colSpanで表示済み
-  } else {
-    return (
-      <td
-        key={hour}
-        style={{
-          border: "1px solid #eee",
-          height: "40px",
-          minWidth: "80px",
-          cursor: "pointer"
-        }}
-        onClick={() => openModal(orNumber, hour)}
-      />
-    );
-  }
-})}
-
+                    if (surgery) {
+                      const start = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${surgery.start}`);
+                      const end = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${surgery.end}`);
+                      const span = end.diff(start, "minute") / 15;
+                      return (
+                        <td
+                          key={quarter}
+                          colSpan={span}
+                          style={{
+                            background: "#d0ebff",
+                            border: "1px solid #87c4ff",
+                            minWidth: `${40 * span}px`,
+                            fontSize: "0.7rem",
+                            whiteSpace: "pre-line",
+                            lineHeight: 1.3,
+                            padding: "4px",
+                            cursor: "pointer",
+                            height: "80px",
+                            verticalAlign: "top"
+                          }}
+                          onClick={() => openModal(orNumber, quarter)}
+                        >
+                          <div style={{ fontWeight: "bold", fontSize: "0.85rem" }}>{surgery.procedure}</div>
+                          {`${surgery.start}〜${surgery.end}\n${surgery.surgeon}\n${surgery.position}\n${surgery.anesthesia}`}
+                        </td>
+                      );
+                    } else if (isRunning) {
+                      return null;
+                    } else {
+                      return <td key={quarter} className="sr-cell" style={{ height: "80px" }} onClick={() => openModal(orNumber, quarter)} />;
+                    }
+                  })}
                 </tr>
               );
             })}
@@ -130,59 +158,37 @@ function SurgeryRequest() {
         </table>
       </div>
 
-      {/* モーダル */}
       {modalInfo && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.4)", display: "flex", justifyContent: "center", alignItems: "center"
-        }}
-          onClick={closeModal}
-        >
-          <div
-            style={{ background: "#fff", padding: "1.5rem", borderRadius: "8px", width: "90%", maxWidth: "400px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginBottom: "1rem" }}>
-              {selectedDate.format("YYYY-MM-DD")} {modalInfo.room} / {modalInfo.hour}:00
-            </h3>
-            <input
-              type="text"
-              placeholder="術式名"
-              value={modalInfo.procedure}
-              onChange={(e) => setModalInfo({ ...modalInfo, procedure: e.target.value })}
-              style={{ width: "100%", marginBottom: "0.5rem", padding: "0.5rem" }}
-            />
-            <input
-              type="text"
-              placeholder="診療科"
-              value={modalInfo.department}
-              onChange={(e) => setModalInfo({ ...modalInfo, department: e.target.value })}
-              style={{ width: "100%", marginBottom: "0.5rem", padding: "0.5rem" }}
-            />
-            <input
-              type="text"
-              placeholder="執刀医"
-              value={modalInfo.surgeon}
-              onChange={(e) => setModalInfo({ ...modalInfo, surgeon: e.target.value })}
-              style={{ width: "100%", marginBottom: "0.5rem", padding: "0.5rem" }}
-            />
+        <div className="sr-modal-backdrop" onClick={closeModal}>
+          <div className="sr-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: "1rem" }}>{selectedDate.format("YYYY-MM-DD")} {modalInfo.room} / {modalInfo.start}</h3>
+
+            <select value={modalInfo.department} onChange={(e) => setModalInfo({ ...modalInfo, department: e.target.value, procedure: "" })} className="sr-input">
+              <option value="">診療科を選択</option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>{dept.name}</option>
+              ))}
+            </select>
+
+            <select value={modalInfo.procedure} onChange={(e) => setModalInfo({ ...modalInfo, procedure: e.target.value })} className="sr-input">
+              <option value="">術式を選択</option>
+              {filteredProcedures.map((proc) => (
+                <option key={proc.id} value={proc.name}>{proc.name}</option>
+              ))}
+            </select>
+
+            <input type="text" placeholder="執刀医" value={modalInfo.surgeon} onChange={(e) => setModalInfo({ ...modalInfo, surgeon: e.target.value })} className="sr-input" />
+            <input type="text" placeholder="体位" value={modalInfo.position} onChange={(e) => setModalInfo({ ...modalInfo, position: e.target.value })} className="sr-input" />
+            <input type="text" placeholder="麻酔方法" value={modalInfo.anesthesia} onChange={(e) => setModalInfo({ ...modalInfo, anesthesia: e.target.value })} className="sr-input" />
+
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <input
-                type="time"
-                value={modalInfo.start}
-                onChange={(e) => setModalInfo({ ...modalInfo, start: e.target.value })}
-                style={{ flex: 1 }}
-              />
-              <input
-                type="time"
-                value={modalInfo.end}
-                onChange={(e) => setModalInfo({ ...modalInfo, end: e.target.value })}
-                style={{ flex: 1 }}
-              />
+              <input type="time" step="900" value={modalInfo.start} onChange={(e) => setModalInfo({ ...modalInfo, start: e.target.value })} style={{ flex: 1 }} />
+              <input type="time" step="900" value={modalInfo.end} onChange={(e) => setModalInfo({ ...modalInfo, end: e.target.value })} style={{ flex: 1 }} />
             </div>
+
             <div style={{ textAlign: "right" }}>
               <button onClick={saveSurgery} style={{ marginRight: "0.5rem" }}>保存</button>
-              <button onClick={closeModal}>キャンセル</button>
+              <button className="sr-close" onClick={closeModal}>キャンセル</button>
             </div>
           </div>
         </div>
