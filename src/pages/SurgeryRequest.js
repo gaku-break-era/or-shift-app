@@ -117,7 +117,7 @@ function SurgeryRequest() {
               <div
                 key={i}
                 style={{
-                  width: 40,
+                  width: 60,
                   textAlign: "center",
                   fontSize: "0.75rem",
                   color: "#666"
