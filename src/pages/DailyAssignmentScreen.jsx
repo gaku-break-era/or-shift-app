@@ -1,4 +1,3 @@
-// ✅ DailyAssignmentScreen に AI候補生成ボタン・表示・割り当て機能・一括生成機能・手動編集モーダルを追加
 
 import React, { useEffect, useState } from "react";
 import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
@@ -92,6 +91,7 @@ const DailyAssignmentScreen = () => {
   const filteredStaffs = allStaffs.filter(staff => staff.name.includes(searchTerm));
 
   const orNumbers = Array.from({ length: 20 }, (_, i) => `OR${i + 1}`);
+
 
   return (
     <div className="p-6">
