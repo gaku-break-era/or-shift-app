@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect } from "react";
 import dayjs from "dayjs";
-import Select from "react-select";
 import Header from "../components/ui/Header";
 import "./SurgeryRequest.css";
-
-import { db } from "../firebase";
+import Select from "react-select";
+import {
+  db
+} from "../firebase";
 import {
   collection,
   addDoc,
@@ -24,6 +25,7 @@ function SurgeryRequest() {
   const [surgeryData, setSurgeryData] = useState({});
   const [departments, setDepartments] = useState([]);
   const [procedures, setProcedures] = useState([]);
+  const [procedureOptions, setProcedureOptions] = useState([]);
 
   const openModal = (room, hour, existingData = null) => {
     if (existingData) {
@@ -32,13 +34,12 @@ function SurgeryRequest() {
       setModalInfo({
         room,
         hour,
-        procedureFreeText: "",
-        procedureIds: [],
-        requiredType: "AND",
         department: "",
+        procedure: "",
         surgeon: "",
         position: "",
         anesthesia: "",
+        requiredSkills: [],
         start: `${String(hour).padStart(2, "0")}:00`,
         end: `${String(hour + 1).padStart(2, "0")}:00`,
       });
@@ -49,31 +50,40 @@ function SurgeryRequest() {
 
   const saveSurgery = async () => {
     const key = `${selectedDate.format("YYYY-MM-DD")}_${modalInfo.room}_${modalInfo.start}`;
-
-    if (modalInfo.docId) {
-      const ref = docRef(db, "surgerySchedules", modalInfo.docId);
-      await updateDoc(ref, {
-        ...modalInfo,
-        updatedAt: Timestamp.now(),
-      });
-    } else {
-      const docSnap = await addDoc(collection(db, "surgerySchedules"), {
+    
+      // ① 該当術式の requiredRoles を procedures から取得
+      const matchedProc = procedures.find(p => p.name === modalInfo.procedure);
+      const rolesToSave = matchedProc?.requiredRoles || [
+        { type: "scrub", count: 1, skills: [matchedProc?.id] }
+      ];
+    
+      const docData = {
         ...modalInfo,
         date: selectedDate.format("YYYY-MM-DD"),
         createdAt: Timestamp.now(),
-      });
-      modalInfo.docId = docSnap.id;
-    }
+        requiredRoles: rolesToSave,
+      };
+    
+      if (modalInfo.docId) {
+        const ref = docRef(db, "surgerySchedules", modalInfo.docId);
+        await updateDoc(ref, {
+          ...docData,
+          updatedAt: Timestamp.now(),
+        });
+      } else {
+        const docSnap = await addDoc(collection(db, "surgerySchedules"), docData);
+        modalInfo.docId = docSnap.id;
+      }
+    
+      setSurgeryData((prev) => ({ ...prev, [key]: modalInfo }));
+      setModalInfo(null);
+    };
 
-    setSurgeryData((prev) => ({ ...prev, [key]: modalInfo }));
-    setModalInfo(null);
-  };
 
   const handleDelete = async () => {
     if (!modalInfo.docId) return;
     const ref = docRef(db, "surgerySchedules", modalInfo.docId);
     await deleteDoc(ref);
-
     const key = `${selectedDate.format("YYYY-MM-DD")}_${modalInfo.room}_${modalInfo.start}`;
     const newData = { ...surgeryData };
     delete newData[key];
@@ -91,17 +101,14 @@ function SurgeryRequest() {
         where("date", "==", selectedDate.format("YYYY-MM-DD"))
       );
       const querySnapshot = await getDocs(q);
-
       const loadedData = {};
       querySnapshot.forEach((doc) => {
         const d = doc.data();
         const key = `${d.date}_${d.room}_${d.start}`;
         loadedData[key] = { ...d, docId: doc.id };
       });
-
       setSurgeryData(loadedData);
     };
-
     fetchSurgeryData();
   }, [selectedDate]);
 
@@ -109,29 +116,24 @@ function SurgeryRequest() {
     const fetchMaster = async () => {
       const deptSnap = await getDocs(collection(db, "departments"));
       const procSnap = await getDocs(collection(db, "procedures"));
-      setDepartments(deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setProcedures(procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const depts = deptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const procs = procSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setDepartments(depts);
+      setProcedures(procs);
+      setProcedureOptions(procs.map(p => ({ label: p.name, value: p.id })));
     };
     fetchMaster();
   }, []);
-
-  const procedureOptions = procedures.map((proc) => ({
-    value: proc.id,
-    label: proc.name,
-    departmentId: proc.departmentId,
-  }));
 
   return (
     <div style={{ padding: "1rem" }}>
       <Header />
       <h2 className="sr-title">📝 手術申し込み画面</h2>
-
       <div style={{ display: "flex", justifyContent: "center", gap: "1rem", marginBottom: "1rem" }}>
         <button onClick={handlePrev}>◀ 前日</button>
         <strong>{selectedDate.format("YYYY年MM月DD日 (ddd)")}</strong>
         <button onClick={handleNext}>翌日 ▶</button>
       </div>
-
       <div className="sr-container">
         <table className="sr-table">
           <thead>
@@ -152,7 +154,6 @@ function SurgeryRequest() {
                     const targetTime = `${String(hour).padStart(2, "0")}:00`;
                     const key = `${selectedDate.format("YYYY-MM-DD")}_${orNumber}_${targetTime}`;
                     const surgery = surgeryData[key];
-
                     const isCovered = Object.values(surgeryData).some(s => {
                       if (s.room !== orNumber) return false;
                       const start = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.start}`);
@@ -161,26 +162,20 @@ function SurgeryRequest() {
                       return current.isAfter(start) && current.isBefore(end);
                     });
                     if (isCovered && !surgery) return null;
-
                     if (surgery) {
                       const startHour = parseInt(surgery.start.split(":")[0]);
                       const endHour = parseInt(surgery.end.split(":")[0]);
                       const span = endHour - startHour;
-
                       return (
-                        <td
-                          key={hour}
-                          colSpan={span}
-                          onClick={() => openModal(orNumber, startHour, surgery)}
+                        <td key={hour} colSpan={span} onClick={() => openModal(orNumber, startHour, surgery)}
                           style={{
                             backgroundColor: "#d0ebff",
                             border: "1px solid #87c4ff",
                             padding: "4px",
                             fontSize: "0.7rem",
                             textAlign: "left"
-                          }}
-                        >
-                          <strong>{surgery.procedureFreeText}</strong><br />
+                          }}>
+                          <strong>{surgery.procedure}</strong><br />
                           {surgery.surgeon}<br />
                           {surgery.position}<br />
                           {surgery.anesthesia}<br />
@@ -188,13 +183,8 @@ function SurgeryRequest() {
                         </td>
                       );
                     }
-
                     return (
-                      <td
-                        key={hour}
-                        className="sr-cell"
-                        onClick={() => openModal(orNumber, hour)}
-                      />
+                      <td key={hour} className="sr-cell" onClick={() => openModal(orNumber, hour)} />
                     );
                   })}
                 </tr>
@@ -209,114 +199,62 @@ function SurgeryRequest() {
           <div className="sr-modal" onClick={(e) => e.stopPropagation()}>
             <h3>{modalInfo.room} - {modalInfo.start}</h3>
 
-            <input
-              className="sr-input"
-              placeholder="術式名（自由入力）"
-              value={modalInfo.procedureFreeText || ""}
-              onChange={(e) => setModalInfo({ ...modalInfo, procedureFreeText: e.target.value })}
-            />
-
-            <label style={{ fontSize: "0.8rem" }}>この手術に配置可能なスキル</label>
-            <label style={{ fontSize: "0.8rem" }}>診療科を選択</label>
-<select
-  className="sr-input"
-  value={modalInfo.department}
-  onChange={(e) =>
-    setModalInfo({
-      ...modalInfo,
-      department: e.target.value,    
-    })
-  }
->
-  <option value="">-- 診療科を選択 --</option>
-  {departments.map((dept) => (
-    <option key={dept.id} value={dept.id}>
-      {dept.name}
-    </option>
-  ))}
-</select>
-
-            <Select
-              isMulti
-              options={procedureOptions.filter(opt =>
-                opt.departmentId === modalInfo.department
-              )}
-              value={procedureOptions.filter((opt) =>
-                modalInfo.procedureIds?.includes(opt.value)
-              )}
-              onChange={(selected) =>
-                setModalInfo({
-                  ...modalInfo,
-                  procedureIds: selected.map((opt) => opt.value),
-                })
-              }
-            />
-
-            <label style={{ fontSize: "0.8rem" }}>判定条件</label>
-            <select
-              className="sr-input"
-              value={modalInfo.requiredType || "AND"}
-              onChange={(e) =>
-                setModalInfo({ ...modalInfo, requiredType: e.target.value })
-              }
-            >
-              <option value="AND">すべて必要 (AND)</option>
-              <option value="OR">いずれかで可 (OR)</option>
+            <select className="sr-input" value={modalInfo.department}
+              onChange={(e) => setModalInfo({ ...modalInfo, department: e.target.value, procedure: "" })}>
+              <option value="">診療科を選択</option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>{dept.name}</option>
+              ))}
             </select>
 
-            <input
-              className="sr-input"
-              placeholder="執刀医"
-              value={modalInfo.surgeon}
-              onChange={(e) => setModalInfo({ ...modalInfo, surgeon: e.target.value })}
-            />
-            <input
-              className="sr-input"
-              placeholder="体位"
-              value={modalInfo.position}
-              onChange={(e) => setModalInfo({ ...modalInfo, position: e.target.value })}
-            />
-            <input
-              className="sr-input"
-              placeholder="麻酔方法"
-              value={modalInfo.anesthesia}
-              onChange={(e) => setModalInfo({ ...modalInfo, anesthesia: e.target.value })}
-            />
+            <select className="sr-input" value={modalInfo.procedure}
+              onChange={(e) => setModalInfo({ ...modalInfo, procedure: e.target.value })}>
+              <option value="">術式を選択</option>
+              {procedures.filter(p => p.departmentId === modalInfo.department).map((proc) => (
+                <option key={proc.id} value={proc.name}>{proc.name}</option>
+              ))}
+            </select>
+
+            <input className="sr-input" placeholder="執刀医" value={modalInfo.surgeon}
+              onChange={(e) => setModalInfo({ ...modalInfo, surgeon: e.target.value })} />
+            <input className="sr-input" placeholder="体位" value={modalInfo.position}
+              onChange={(e) => setModalInfo({ ...modalInfo, position: e.target.value })} />
+            <input className="sr-input" placeholder="麻酔方法" value={modalInfo.anesthesia}
+              onChange={(e) => setModalInfo({ ...modalInfo, anesthesia: e.target.value })} />
+
+            <div style={{ margin: "1rem 0" }}>
+              <label>この手術に配置可能なスキル</label>
+              <Select
+                isMulti
+                options={procedureOptions}
+                value={procedureOptions.filter(o => modalInfo.requiredSkills?.includes(o.value))}
+                onChange={(selected) =>
+                  setModalInfo({ ...modalInfo, requiredSkills: selected.map(s => s.value) })}
+                placeholder="必要なスキルを選択（任意）"
+              />
+            </div>
+
             <div style={{ display: "flex", gap: "0.5rem" }}>
-              <input
-                type="time"
-                value={modalInfo.start}
-                onChange={(e) => setModalInfo({ ...modalInfo, start: e.target.value })}
-              />
-              <input
-                type="time"
-                value={modalInfo.end}
-                onChange={(e) => setModalInfo({ ...modalInfo, end: e.target.value })}
-              />
+              <input type="time" value={modalInfo.start}
+                onChange={(e) => setModalInfo({ ...modalInfo, start: e.target.value })} />
+              <input type="time" value={modalInfo.end}
+                onChange={(e) => setModalInfo({ ...modalInfo, end: e.target.value })} />
             </div>
 
             <div style={{ textAlign: "right", marginTop: "1rem" }}>
               {modalInfo.docId && (
-                <button
-                  onClick={handleDelete}
+                <button onClick={handleDelete}
                   style={{
                     marginRight: "0.5rem",
                     background: "#f66",
                     color: "#fff",
                     border: "none",
                     padding: "0.5rem 1rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  削除
-                </button>
+                    cursor: "pointer"
+                  }}>削除</button>
               )}
-              <button onClick={saveSurgery} style={{ marginRight: "0.5rem" }}>
-                保存
-              </button>
-              <button onClick={closeModal} className="sr-close">
-                キャンセル
-              </button>
+              <button onClick={saveSurgery} style={{ marginRight: "0.5rem" }}>保存</button>
+              <button onClick={closeModal} className="sr-close">キャンセル</button>
             </div>
           </div>
         </div>
