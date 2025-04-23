@@ -19,6 +19,8 @@ import SkillsList from "./pages/SkillsList";
 import ProcedureMaster from "./pages/ProcedureMaster";
 import AdminProcedures from "./pages/AdminProcedures";
 import SurgeryRequest from "./pages/SurgeryRequest";
+import { HTML5Backend } from 'react-dnd-html5-backend';
+import { DndProvider } from 'react-dnd';
 
 
 
@@ -26,6 +28,7 @@ import SurgeryRequest from "./pages/SurgeryRequest";
 
 function App() {
   return (
+    <DndProvider backend={HTML5Backend}>
     <Router>
       <Routes>
         {/* ✅ 初期表示はログインページ */}
@@ -55,6 +58,7 @@ function App() {
         <Route path="/" element={<LoginPage />} />
       </Routes>
     </Router>
+    </DndProvider>
   );
 }
 

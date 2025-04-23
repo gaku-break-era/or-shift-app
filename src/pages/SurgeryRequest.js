@@ -15,6 +15,11 @@ import {
   Timestamp,
   addDoc,
 } from "firebase/firestore";
+import DraggableSurgeryBar from "../DraggableSurgeryBar";
+import { useDrop } from "react-dnd";
+import DropCell from "../components/ui/DropCell";
+
+
 
 function SurgeryRequest() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
@@ -34,9 +39,13 @@ function SurgeryRequest() {
       const loadedData = {};
       querySnapshot.forEach((doc) => {
         const d = doc.data();
+        const start = dayjs(`${d.date} ${d.start}`);
+        const end = dayjs(`${d.date} ${d.end}`);
+        const durationMinutes = end.diff(start, "minute");
         const key = `${d.date}_${d.room}_${d.start}`;
-        loadedData[key] = { ...d, docId: doc.id };
+        loadedData[key] = { ...d, docId: doc.id, durationMinutes };
       });
+      
       setSurgeryData(loadedData);
     };
 
@@ -68,9 +77,24 @@ function SurgeryRequest() {
   const handleCellClick = (room, quarter, surgery) => {
     if (mode === "request") {
       if (surgery) {
+        // 編集モーダルを開く
         setModalInfo(surgery);
       } else {
-        openModal(room, quarter);
+        // 新規追加モーダル
+        const hour = Math.floor(quarter / 4);
+        const minute = (quarter % 4) * 15;
+        const start = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+        const end = `${String(hour).padStart(2, "0")}:${String(minute + 15).padStart(2, "0")}`;
+        setModalInfo({
+          room,
+          hour,
+          start,
+          end,
+          surgeon: "",
+          procedure: "",
+          position: "",
+          anesthesia: "",
+        });
       }
     } else if (mode === "assignment" && surgery) {
       setSelectedSurgery(surgery);
@@ -127,38 +151,88 @@ function SurgeryRequest() {
                     const currentTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
                     const key = `${selectedDate.format("YYYY-MM-DD")}_${room}_${currentTime}`;
                     const surgery = surgeryData[key];
-                    const isCovered = Object.values(surgeryData).some(s => {
+
+                    const isCovered = Object.values(surgeryData).some((s) => {
                       if (s.room !== room) return false;
                       const start = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.start}`);
                       const end = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${s.end}`);
                       const current = dayjs(`${selectedDate.format("YYYY-MM-DD")} ${currentTime}`);
                       return current.isAfter(start) && current.isBefore(end);
                     });
+
                     if (isCovered && !surgery) return null;
+
                     if (surgery) {
                       const startHour = parseInt(surgery.start.split(":")[0]);
                       const startMin = parseInt(surgery.start.split(":")[1]);
                       const endHour = parseInt(surgery.end.split(":")[0]);
                       const endMin = parseInt(surgery.end.split(":")[1]);
                       const span = ((endHour * 60 + endMin) - (startHour * 60 + startMin)) / 15;
+
                       return (
-                        <td key={quarter} colSpan={span} onClick={() => handleCellClick(room, quarter, surgery)} style={{
-                          backgroundColor: "#d0ebff",
-                          border: "1px solid #87c4ff",
-                          fontSize: "0.7rem",
-                          textAlign: "left"
-                        }}>
-                          <strong>{surgery.procedure}</strong><br />
-                          {surgery.surgeon}<br />
-                          {surgery.start}~{surgery.end}
+                        <td
+  key={quarter}
+  colSpan={span}
+  onClick={() => handleCellClick(room, quarter, surgery)}
+  style={{
+    backgroundColor: "#d0ebff",
+    border: "1px solid #87c4ff",
+    fontSize: "0.7rem",
+    textAlign: "left",
+    padding: "4px",
+    lineHeight: "1.4",
+  }}
+>
+
+
+                          <>
+                          <DraggableSurgeryBar
+  surgery={surgery}
+  quarter={quarter}
+  room={room}
+  durationMinutes={surgery.durationMinutes}
+  onClick={() => handleCellClick(room, quarter, surgery)}
+/>
+
+                            <strong>{surgery.procedure}</strong><br />
+                            {surgery.surgeon}<br />
+                            {surgery.position}<br />
+                            {surgery.anesthesia}<br />
+                            {surgery.start}~{surgery.end}
+                          </>
                         </td>
+
                       );
                     }
+
                     return (
-                      <td key={quarter} className="sr-cell" onClick={() => handleCellClick(room, quarter, null)} />
+                      <DropCell
+                        key={quarter}
+                        room={room}
+                        currentTime={currentTime}
+                        onDrop={async (item) => {
+                          if (!item.docId) return;
+                        
+                          const ref = docRef(db, "surgerySchedules", item.docId);
+                          await updateDoc(ref, {
+                            room,
+                            start: currentTime,
+                            end: dayjs(`2024-01-01 ${currentTime}`)
+                              .add(item.durationMinutes, "minute")
+                              .format("HH:mm"),
+                          });
+                        
+                          window.location.reload();
+                        }}
+                        
+                        
+                        onClick={() => handleCellClick(room, quarter, null)}
+                      />
                     );
+                    
                   })}
                 </tr>
+
               );
             })}
           </tbody>
@@ -202,6 +276,97 @@ function SurgeryRequest() {
           </div>
         </div>
       )}
+      {modalInfo && (
+  <div className="sr-modal-backdrop" onClick={() => setModalInfo(null)}>
+    <div className="sr-modal" onClick={(e) => e.stopPropagation()}>
+      <h3>{modalInfo.room} - {modalInfo.start}</h3>
+      <input
+        className="sr-input"
+        placeholder="術式"
+        value={modalInfo.procedure}
+        onChange={(e) => setModalInfo({ ...modalInfo, procedure: e.target.value })}
+      />
+      <input
+        className="sr-input"
+        placeholder="執刀医"
+        value={modalInfo.surgeon}
+        onChange={(e) => setModalInfo({ ...modalInfo, surgeon: e.target.value })}
+      />
+      <input
+        className="sr-input"
+        placeholder="体位"
+        value={modalInfo.position}
+        onChange={(e) => setModalInfo({ ...modalInfo, position: e.target.value })}
+      />
+      <input
+        className="sr-input"
+        placeholder="麻酔方法"
+        value={modalInfo.anesthesia}
+        onChange={(e) => setModalInfo({ ...modalInfo, anesthesia: e.target.value })}
+      />
+      <div style={{ display: "flex", gap: "0.5rem", margin: "0.5rem 0" }}>
+        <input
+          type="time"
+          value={modalInfo.start}
+          onChange={(e) => setModalInfo({ ...modalInfo, start: e.target.value })}
+        />
+        <input
+          type="time"
+          value={modalInfo.end}
+          onChange={(e) => setModalInfo({ ...modalInfo, end: e.target.value })}
+        />
+      </div>
+      <div style={{ textAlign: "right" }}>
+        {modalInfo.docId && (
+          <button
+            onClick={async () => {
+              await deleteDoc(docRef(db, "surgerySchedules", modalInfo.docId));
+              setModalInfo(null);
+              window.location.reload(); // 簡易リロード
+            }}
+            style={{
+              background: "#f66",
+              color: "#fff",
+              padding: "0.5rem 1rem",
+              border: "none",
+              marginRight: "0.5rem"
+            }}
+          >
+            削除
+          </button>
+        )}
+        <button
+          onClick={async () => {
+            const payload = {
+              ...modalInfo,
+              date: selectedDate.format("YYYY-MM-DD"),
+              updatedAt: Timestamp.now(),
+            };
+            if (modalInfo.docId) {
+              await updateDoc(docRef(db, "surgerySchedules", modalInfo.docId), payload);
+            } else {
+              const newDoc = await addDoc(collection(db, "surgerySchedules"), {
+                ...payload,
+                createdAt: Timestamp.now(),
+              });
+              modalInfo.docId = newDoc.id;
+            }
+            setModalInfo(null);
+            window.location.reload(); // 簡易リロード
+          }}
+          style={{
+            padding: "0.5rem 1rem",
+            marginRight: "0.5rem"
+          }}
+        >
+          保存
+        </button>
+        <button onClick={() => setModalInfo(null)} className="sr-close">キャンセル</button>
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
 }
