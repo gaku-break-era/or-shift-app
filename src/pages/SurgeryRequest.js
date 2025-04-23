@@ -20,6 +20,9 @@ function SurgeryRequest() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [modalInfo, setModalInfo] = useState(null);
   const [surgeryData, setSurgeryData] = useState({});
+  const [mode, setMode] = useState("request");
+  const [selectedSurgery, setSelectedSurgery] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -47,7 +50,9 @@ function SurgeryRequest() {
     const hour = Math.floor(quarterHour / 4);
     const minute = (quarterHour % 4) * 15;
     const start = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+
     const end = `${String(hour).padStart(2, "0")}:${String(minute + 15).padStart(2, "0")}`;
+
     setModalInfo({
       room,
       hour,
@@ -60,6 +65,19 @@ function SurgeryRequest() {
     });
   };
 
+  const handleCellClick = (room, quarter, surgery) => {
+    if (mode === "request") {
+      if (surgery) {
+        setModalInfo(surgery);
+      } else {
+        openModal(room, quarter);
+      }
+    } else if (mode === "assignment" && surgery) {
+      setSelectedSurgery(surgery);
+      setShowAssignModal(true);
+    }
+  };
+
   return (
     <div style={{ padding: "1rem" }}>
       <Header />
@@ -68,6 +86,17 @@ function SurgeryRequest() {
         <button onClick={handlePrev}>◀ 前日</button>
         <strong>{selectedDate.format("YYYY年MM月DD日 (ddd)")}</strong>
         <button onClick={handleNext}>翌日 ▶</button>
+      </div>
+
+      <div style={{ textAlign: "center", marginBottom: "1rem" }}>
+        <label>
+          <input type="radio" checked={mode === "request"} onChange={() => setMode("request")} />
+          手術申込モード
+        </label>
+        <label style={{ marginLeft: "1rem" }}>
+          <input type="radio" checked={mode === "assignment"} onChange={() => setMode("assignment")} />
+          配置作成モード
+        </label>
       </div>
 
       <div className="sr-container">
@@ -113,7 +142,7 @@ function SurgeryRequest() {
                       const endMin = parseInt(surgery.end.split(":")[1]);
                       const span = ((endHour * 60 + endMin) - (startHour * 60 + startMin)) / 15;
                       return (
-                        <td key={quarter} colSpan={span} style={{
+                        <td key={quarter} colSpan={span} onClick={() => handleCellClick(room, quarter, surgery)} style={{
                           backgroundColor: "#d0ebff",
                           border: "1px solid #87c4ff",
                           fontSize: "0.7rem",
@@ -126,7 +155,7 @@ function SurgeryRequest() {
                       );
                     }
                     return (
-                      <td key={quarter} className="sr-cell" onClick={() => openModal(room, quarter)} />
+                      <td key={quarter} className="sr-cell" onClick={() => handleCellClick(room, quarter, null)} />
                     );
                   })}
                 </tr>
@@ -135,6 +164,44 @@ function SurgeryRequest() {
           </tbody>
         </table>
       </div>
+
+      {showAssignModal && selectedSurgery && (
+        <div className="sr-modal-backdrop" onClick={() => setShowAssignModal(false)}>
+          <div className="sr-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{selectedSurgery.room} - {selectedSurgery.start} のAI候補</h3>
+            {["scrub", "circulating"].map(role => (
+              <div key={role} style={{ marginBottom: "1rem" }}>
+                <h4>{role === "scrub" ? "🔧 器械出し候補" : "🚶 外回り候補"}</h4>
+                {(selectedSurgery.aiCandidates?.[role] || []).map((c, idx) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                    <div>
+                      {c.name}（{c.experience}年目）<br />
+                      <span style={{ fontSize: "0.8rem", color: "#666" }}>{c.reason}</span>
+                    </div>
+                    {selectedSurgery[role]?.name === c.name ? (
+                      <span style={{ color: "green" }}>✅ 割り当て済み</span>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          const ref = docRef(db, "surgerySchedules", selectedSurgery.docId);
+                          await updateDoc(ref, { [role]: c });
+                          alert(`${c.name} さんを ${role === "scrub" ? "器械出し" : "外回り"} に割り当てました`);
+                          setShowAssignModal(false);
+                        }}
+                      >
+                        割り当て
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{ textAlign: "right", marginTop: "1rem" }}>
+              <button onClick={() => setShowAssignModal(false)} className="sr-close">閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
