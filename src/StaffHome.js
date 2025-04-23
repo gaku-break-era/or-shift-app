@@ -1,79 +1,110 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Header from "./components/ui/Header";
+import { db } from "./firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import dayjs from "dayjs";
 
-const thisWeekShift = [
-  { day: "月", date: "4/22", shift: "◯" },
-  { day: "火", date: "4/23", shift: "/" },
-  { day: "水", date: "4/24", shift: "X]" },
-  { day: "木", date: "4/25", shift: "休" },
-  { day: "金", date: "4/26", shift: "◯" },
-  { day: "土", date: "4/27", shift: "Y" },
-  { day: "日", date: "4/28", shift: "□" }
-];
+const StaffHome = () => {
+  const [thisWeekShift, setThisWeekShift] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [todayIndex, setTodayIndex] = useState(null);
+  const [mySurgeries, setMySurgeries] = useState([]);
+  const staffId = "kawase"; // 仮ユーザーID
 
-function StaffHome() {
-  const todayIndex = 2; // 仮で水曜日（index=2）
+  useEffect(() => {
+    const start = dayjs().startOf("week").add(1, "day"); // 月曜スタート
+    const dates = Array.from({ length: 7 }, (_, i) => start.add(i, "day"));
+    const formatted = dates.map(d => ({
+      label: d.format("dd"),
+      date: d.format("YYYY-MM-DD"),
+      short: d.format("M/D")
+    }));
+    setThisWeekShift(formatted);
+    const today = dayjs().format("YYYY-MM-DD");
+    const todayIdx = formatted.findIndex(f => f.date === today);
+    setTodayIndex(todayIdx);
+    setSelectedDate(today);
+  }, []);
+
+  useEffect(() => {
+    const fetchShiftAndSurgeries = async () => {
+      if (!selectedDate) return;
+
+      // Shift 取得
+      const shiftSnap = await getDocs(query(
+        collection(db, "shifts"),
+        where("staffId", "==", staffId),
+        where("date", "==", selectedDate)
+      ));
+      const shiftData = shiftSnap.docs[0]?.data()?.type || "ー";
+
+      // 手術スケジュール取得
+      const surgerySnap = await getDocs(query(
+        collection(db, "surgerySchedules"),
+        where("date", "==", selectedDate)
+      ));
+      const myAssigned = surgerySnap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(s => 
+          s.scrub?.id === staffId || 
+          s.circulating?.id === staffId || 
+          s.scrubInstructor?.id === staffId || 
+          s.circulatingInstructor?.id === staffId
+        );
+      setMySurgeries(myAssigned);
+    };
+    fetchShiftAndSurgeries();
+  }, [selectedDate]);
 
   return (
     <div style={{ padding: "1rem", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
       <Header />
 
-      {/* シフト希望提出ボタン */}
-      <Link to="/form">
-        <button style={{
-          width: "100%",
-          padding: "1rem",
-          backgroundColor: "#4285F4",
-          color: "white",
-          border: "none",
-          borderRadius: "8px",
-          fontSize: "1rem",
-          marginBottom: "1.5rem"
-        }}>
-          📅 シフト希望を提出する
-        </button>
-      </Link>
-
-      {/* 今週のシフト表示 */}
+      {/* 今週のシフト */}
       <section style={{ marginBottom: "2rem" }}>
-        <h2 style={{ marginBottom: "0.5rem" }}>今週のシフト</h2>
+        <h2>今週のシフト</h2>
         <div style={{ display: "flex", overflowX: "auto", gap: "0.5rem" }}>
           {thisWeekShift.map((item, index) => (
             <div
               key={index}
+              onClick={() => setSelectedDate(item.date)}
               style={{
                 minWidth: "60px",
                 padding: "0.5rem",
-                backgroundColor: index === todayIndex ? "#E0F2FF" : "#F4F4F4",
+                backgroundColor: item.date === selectedDate ? "#E0F2FF" : "#F4F4F4",
                 borderRadius: "6px",
-                textAlign: "center"
+                textAlign: "center",
+                cursor: "pointer"
               }}
             >
-              <div>{item.day}</div>
-              <div style={{ fontSize: "0.8rem", color: "#666" }}>{item.date}</div>
-              <div style={{ fontWeight: "bold", marginTop: "0.3rem" }}>{item.shift}</div>
+              <div>{item.label}</div>
+              <div style={{ fontSize: "0.8rem", color: "#666" }}>{item.short}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* 今週の配置（仮） */}
+      {/* 当日の手術配置 */}
       <section style={{ marginBottom: "2rem" }}>
-        <h2>今週の手術室配置</h2>
-        <div style={{
-          backgroundColor: "#FAFAFA",
-          padding: "1rem",
-          borderRadius: "8px",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
-        }}>
-          <p>🧠 OR3：腹腔鏡下胆摘（川瀬, 青木）</p>
-          <p>🦴 OR2：人工膝関節置換術（山本, 田中）</p>
-          <p>❤️ OR1：心臓バイパス術（川瀬, 田中, 鈴木）</p>
-        </div>
+        <h2>{dayjs(selectedDate).format("M月D日")}の手術配置</h2>
+        {mySurgeries.length > 0 ? (
+          mySurgeries.map((surg, i) => (
+            <div key={i} style={{ marginBottom: "1rem", background: "#FAFAFA", padding: "0.8rem", borderRadius: "8px" }}>
+              <p><strong>{surg.department}</strong>：{surg.procedure}</p>
+              <p>🧑‍⚕️ 執刀医: {surg.surgeon}</p>
+              <p>👩‍⚕️ 器械出し: {surg.scrub?.name}（指導: {surg.scrubInstructor?.name || "なし"}）</p>
+              <p>👟 外回り: {surg.circulating?.name}（指導: {surg.circulatingInstructor?.name || "なし"}）</p>
+              <p>💉 麻酔: {surg.anesthesia}</p>
+              <p>🛌 体位: {surg.position}</p>
+            </div>
+          ))
+        ) : (
+          <p>この日に割り当てられている手術はありません。</p>
+        )}
       </section>
 
-      {/* 個人スキル表ボタン */}
+      {/* スキルチャート */}
       <Link to="/skills">
         <button style={{
           width: "100%",
@@ -89,7 +120,7 @@ function StaffHome() {
         </button>
       </Link>
 
-      {/* 指導レビュー入力ボタン */}
+      {/* 指導レビュー */}
       <Link to="/review">
         <button style={{
           width: "100%",
@@ -98,13 +129,29 @@ function StaffHome() {
           color: "#333",
           border: "none",
           borderRadius: "8px",
-          fontSize: "1rem"
+          fontSize: "1rem",
+          marginBottom: "1.5rem"
         }}>
           📝 指導レビューを入力する
         </button>
       </Link>
+
+      {/* シフト希望提出 */}
+      <Link to="/form">
+        <button style={{
+          width: "100%",
+          padding: "1rem",
+          backgroundColor: "#4285F4",
+          color: "white",
+          border: "none",
+          borderRadius: "8px",
+          fontSize: "1rem"
+        }}>
+          📅 シフト希望を提出する
+        </button>
+      </Link>
     </div>
   );
-}
+};
 
 export default StaffHome;

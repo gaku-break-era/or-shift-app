@@ -194,11 +194,7 @@ function SurgeryRequest() {
   onClick={() => handleCellClick(room, quarter, surgery)}
 />
 
-                            <strong>{surgery.procedure}</strong><br />
-                            {surgery.surgeon}<br />
-                            {surgery.position}<br />
-                            {surgery.anesthesia}<br />
-                            {surgery.start}~{surgery.end}
+                            
                           </>
                         </td>
 
