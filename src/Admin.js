@@ -1,4 +1,4 @@
-// src/Admin.js - 修正版
+// src/Admin.js - 夜勤/当直人数カウント＆保存後即反映版
 import React, { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from "./firebase";
@@ -7,17 +7,18 @@ import { saveAs } from "file-saver";
 import emailjs from "@emailjs/browser";
 import { isWeekend } from "date-fns";
 import dayjs from "dayjs";
-// dayjs プラグインのインポート
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import FeedbackForm from "./FeedbackForm";
 import Header from "./components/ui/Header";
-
-// dayjs プラグインの拡張
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
-// テーブルセル用スタイル
+const today = dayjs();
+const defaultMonth = today.date() <= 10
+  ? today.add(1, "month").month() + 1
+  : today.add(2, "month").month() + 1;
+
 const thStyle = { border: "1px solid #ccc", padding: "4px", background: "#fafafa" };
 const tdStyle = { border: "1px solid #ccc", padding: "4px" };
 
@@ -32,7 +33,7 @@ function shuffleArray(arr) {
 
 function Admin() {
   const [events, setEvents] = useState({});
-  const [uniqueNames, setUniqueNames] = useState([]);
+  const [uniqueEmployeeIds, setUniqueEmployeeIds] = useState([]);
   const [dates, setDates] = useState([]);
   const [shiftMatrix, setShiftMatrix] = useState({});
   const [hopes, setHopes] = useState({});
@@ -40,9 +41,18 @@ function Admin() {
   const [staffList, setStaffList] = useState([]);
   const [unsubmitted, setUnsubmitted] = useState([]);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(dayjs().month() + 1);
   const [loading, setLoading] = useState(true);
-  const [submittedStaff, setSubmittedStaff] = useState(new Set()); // 希望提出済みスタッフを追跡
+  const [submittedStaffIds, setSubmittedStaffIds] = useState(new Set());
+  const [nightDutyCount, setNightDutyCount] = useState({});
+  const [onCallDutyCount, setOnCallDutyCount] = useState({});
+  const [dayShiftCount, setDayShiftCount] = useState({});
+const [nightShiftCount, setNightShiftCount] = useState({});
+const [lateCShiftCount, setLateCShiftCount] = useState({});
+const [onCallShiftCount, setOnCallShiftCount] = useState({});
+const [freeShiftCount, setFreeShiftCount] = useState({});
+
+
+  const [currentMonth, setCurrentMonth] = useState(defaultMonth);
 
   const EMAIL_SERVICE_ID = "service_12m5w0v";
   const EMAIL_TEMPLATE_ID = "template_gmkbnq8";
@@ -50,267 +60,177 @@ function Admin() {
 
   const shiftOptions = ["", "◯", "/", "X]", "休", "Y", "<", "□", "TF", "ｵC", "ｵﾛ"];
 
-  // ログイン状態の監視
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, (user) => setCurrentUser(user));
     return () => unsubscribe();
   }, []);
 
-  // データ読み込み（currentMonthが変わるごと）
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const year = dayjs().year();
-        // ① 今表示中の月(YYYY-MM-DDリスト)を作成
-        const startOfMonth = dayjs(`${year}-${String(currentMonth).padStart(2, "0")}-01`);
-        const endOfMonth   = startOfMonth.endOf("month");
-        const monthDates = [];
-        
-        // 日付リストを作成
-        let currentDate = startOfMonth;
-        while (currentDate.isBefore(endOfMonth) || currentDate.isSame(endOfMonth)) {
-          monthDates.push(currentDate.format("YYYY-MM-DD"));
-          currentDate = currentDate.add(1, "day");
-        }
-        
-        setDates(monthDates);
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const year = dayjs().year();
+      const startOfMonth = dayjs(`${year}-${String(currentMonth).padStart(2, "0")}-01`);
+      const endOfMonth = startOfMonth.endOf("month");
+      const monthDates = [];
+      let currentDate = startOfMonth;
+      while (currentDate.isSameOrBefore(endOfMonth)) {
+        monthDates.push(currentDate.format("YYYY-MM-DD"));
+        currentDate = currentDate.add(1, "day");
+      }
+      setDates(monthDates);
 
-        // ⑥ 先にstaffList取得
-        const staffSnap = await getDocs(collection(db, "staffList"));
-        const staffData = staffSnap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-          name: `${d.data().lastName || ''} ${d.data().firstName || ''}`.trim()
-        }));
-        setStaffList(staffData);
-        
-        // 登録されているスタッフ名のリストを作成（希望未提出でも表示するため）
-        const registeredStaffNames = staffData
-          .filter(s => s.name) // 名前が設定されているスタッフのみ
-          .map(s => s.name);
-          
-        console.log("登録スタッフ:", registeredStaffNames);
+      const staffSnap = await getDocs(collection(db, "staffList"));
+      const staffData = staffSnap.docs.map((d) => ({
+        id: d.id,
+        employeeId: d.data().employeeId,
+        lastName: d.data().lastName,
+        firstName: d.data().firstName,
+        email: d.data().email || "",
+      }));
+      setStaffList(staffData);
 
-        // ② シフト希望データを取得
-        const reqSnap = await getDocs(collection(db, "shiftRequests"));
-        
-        // 希望データの取得とデバッグ
-        const requests = reqSnap.docs.map((d) => {
-          const data = { id: d.id, ...d.data() };
-          console.log(`シフト希望データ: ${data.name || data.email}`, data);
-          return data;
+      const registeredEmployeeIds = staffData.map((s) => s.employeeId);
+      setUniqueEmployeeIds(registeredEmployeeIds);
+
+      const reqSnap = await getDocs(collection(db, "shiftRequests"));
+      const hopeMap = {};
+      const matrix = {};
+
+      registeredEmployeeIds.forEach((empId) => {
+        monthDates.forEach((date) => {
+          matrix[`${empId}_${date}`] = "";
         });
+      });
 
-        // ③ 希望提出済みスタッフの追跡
-        const submittedNames = new Set();
-        requests.forEach(req => {
-          const name = req.name || req.email;
-          if (name) submittedNames.add(name);
-        });
-        setSubmittedStaff(submittedNames);
-        
-        // 未提出者リスト作成
-        setUnsubmitted(registeredStaffNames.filter(n => !submittedNames.has(n)));
+      const submittedIds = new Set();
+      for (const docSnap of reqSnap.docs) {
+        const req = docSnap.data();
+        const empId = req.employeeId;
+        if (!empId) continue;
+        submittedIds.add(empId);
 
-        // ④ hopeMap(希望) と 初期行列(matrix) を用意
-        const matrix = {};
-        const hopeMap = {};
-
-        // まず空のマトリックスを作成（全登録スタッフ対象）
-        registeredStaffNames.forEach((name) => {
-          monthDates.forEach((date) => {
-            matrix[`${name}_${date}`] = "";
-            hopeMap[`${name}_${date}`] = "";
-          });
-        });
-
-        // シフト希望を処理
-        let hopesCount = 0;  // 処理した希望の数をカウント
-        
-        for (const req of requests) {
-          const name = req.name || req.email;
-          if (!name) continue;
-          
-          // 現在の月のリクエストかチェック - ここを修正
-          // 厳密にチェックする代わりに、実際のデータに含まれる日付をチェック
-          const reqShifts = req.shifts || [];
-          
-          // 希望データのデバッグ出力
-          console.log(`${name}のシフト希望 (${reqShifts.length}件):`, JSON.stringify(reqShifts));
-          
-          for (const shift of reqShifts) {
-            // 日付の形式を統一（YYYY-MM-DD）
-            const shiftDate = typeof shift.date === 'string' ? shift.date : 
-                             shift.date instanceof Date ? dayjs(shift.date).format('YYYY-MM-DD') : null;
-                             
-            if (shiftDate && monthDates.includes(shiftDate)) {
-              // selectionを直接マッピング（off, night, noneなど）
-              const key = `${name}_${shiftDate}`;
-              const value = shift.selection || "";
-              
-              hopeMap[key] = value;
-              hopesCount++;
-              
-              console.log(`希望設定: ${key} = ${value}`);
-            }
+        const shifts = req.shifts || [];
+        for (const shift of shifts) {
+          const shiftDate = typeof shift.date === "string"
+            ? shift.date
+            : dayjs(shift.date).format("YYYY-MM-DD");
+          const month = parseInt(shiftDate.slice(5, 7));
+          if (month === currentMonth) {
+            const key = `${empId}_${shiftDate}`;
+            hopeMap[key] = shift.selection || "";
           }
         }
-        
-        console.log(`合計 ${hopesCount} 件の希望を設定しました`);
-        console.log("希望マップ:", hopeMap);
-        setHopes(hopeMap);
+      }
 
-        // ⑤ 保存済みシフト表があれば上書き反映
-        const title = `${year}年${currentMonth}月`;
-        const savedSnap = await getDoc(doc(db, "shiftSchedules", title));
-        if (savedSnap.exists()) {
-          const saved = savedSnap.data();
-          console.log("保存済みシフト表:", saved);
-          Object.keys(saved).forEach(name => {
-            Object.keys(saved[name]).forEach(date => {
-              if (monthDates.includes(date)) {
-                matrix[`${name}_${date}`] = saved[name][date] || "";
-              }
-            });
-          });
-        }
-        setShiftMatrix(matrix);
-        
-        // ⑦ uniqueNamesを登録スタッフ名に設定
-        setUniqueNames(registeredStaffNames.sort());
+      setSubmittedStaffIds(submittedIds);
+      setUnsubmitted(registeredEmployeeIds.filter(id => !submittedIds.has(id)));
+      setHopes(hopeMap);
 
-        // ⑧ イベント読み込み
-        const evSnap = await getDocs(collection(db, "staffEvents"));
-        const evMap = {};
-        evSnap.docs.forEach((d) => {
-          const name = d.id;
-          (d.data().events || []).forEach((ev) => {
-            if (ev.date && monthDates.includes(ev.date)) {
-              evMap[`${name}_${ev.date}`] = ev.title;
+      const title = `${year}年${currentMonth}月`;
+      const savedSnap = await getDoc(doc(db, "shiftSchedules", title));
+      if (savedSnap.exists()) {
+        const saved = savedSnap.data();
+        Object.keys(saved).forEach(empId => {
+          Object.keys(saved[empId]).forEach(date => {
+            if (monthDates.includes(date)) {
+              matrix[`${empId}_${date}`] = saved[empId][date] || "";
             }
           });
         });
-        setEvents(evMap);
-      } catch (err) {
-        console.error("読み込みエラー:", err);
-        alert("データの読み込みに失敗しました: " + err.message);
-      } finally {
-        setLoading(false);
       }
-    };
-    
+      setShiftMatrix(matrix);
+
+      // ここで夜勤/当直人数カウントも再計算
+      const nightCount = {};
+      const onCallDutyCount = {};
+      const dayCount = {};
+      const lateCCount = {};
+      const oncallShift = {};
+      const freeCount = {};
+
+      monthDates.forEach(date => {
+        let day = 0, night = 0, oncall = 0, latec = 0, oncallsh = 0, free = 0;
+        registeredEmployeeIds.forEach(empId => {
+          const value = matrix[`${empId}_${date}`];
+          if (value === "◯") day++;
+          if (value === "/") night++;
+          if (value === "□") oncall++;
+          if (value === "ｵC") latec++;
+          if (value === "ｵﾛ") oncallsh++;
+          if (value === "TF") free++;
+        });
+        dayCount[date] = day;
+        nightCount[date] = night;
+        onCallDutyCount[date] = oncall;
+        lateCCount[date] = latec;
+        oncallShift[date] = oncallsh;
+        freeCount[date] = free;
+      });
+      
+      setDayShiftCount(dayCount);
+      setNightShiftCount(nightCount);
+      setOnCallDutyCount(onCallDutyCount);
+      setLateCShiftCount(lateCCount);
+      setOnCallShiftCount(oncallShift);
+      setFreeShiftCount(freeCount);
+
+    } catch (err) {
+      console.error("読み込みエラー:", err);
+      alert("データの読み込みに失敗しました: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, [currentMonth]);
 
-  // 値更新ハンドラ
-  const handleChange = (name, date, value) => {
-    setShiftMatrix((prev) => ({ ...prev, [`${name}_${date}`]: value }));
-  };
-
-  // 保存
   const handleSave = async () => {
     try {
       const dataToSave = {};
-      uniqueNames.forEach((name) => {
-        dataToSave[name] = {};
+      uniqueEmployeeIds.forEach((empId) => {
+        dataToSave[empId] = {};
         dates.forEach((date) => {
-          dataToSave[name][date] = shiftMatrix[`${name}_${date}`] || "";
+          dataToSave[empId][date] = shiftMatrix[`${empId}_${date}`] || "";
         });
       });
       const title = `${dayjs().year()}年${currentMonth}月`;
       await setDoc(doc(db, "shiftSchedules", title), dataToSave);
       alert("シフトを保存しました！");
+
+      // 保存後に再取得！！
+      fetchData();
     } catch (err) {
       console.error(err);
       alert("保存に失敗しました。");
     }
   };
 
-  // AI仮割り当て
-  const handleAutoAssign = () => {
-    const updated = { ...shiftMatrix };
-    const nightAssigned = new Set();
-    // 夜勤希望処理
-    dates.forEach((date, i) => {
-      uniqueNames.forEach((name) => {
-        const key = `${name}_${date}`;
-        if (hopes[key] === "night" && !nightAssigned.has(name)) {
-          const d2 = dates[i + 1], d3 = dates[i + 2];
-          if (d2 && d3) {
-            updated[`${name}_${date}`] = "/";
-            updated[`${name}_${d2}`]   = "X]";
-            updated[`${name}_${d3}`]   = "休";
-            nightAssigned.add(name);
-          }
-        }
-      });
-    });
-    // その他の配置
-    dates.forEach((date) => {
-      const holiday = isWeekend(new Date(date));
-      const required = { "/": holiday ? 3 : 4, "□": holiday ? 3 : 0, "ｵC": holiday ? 0 : 2, "ｵﾛ": holiday ? 0 : 2 };
-      for (const [type, count] of Object.entries(required)) {
-        const unassigned = uniqueNames.filter((name) => !updated[`${name}_${date}`]);
-        shuffleArray(unassigned).slice(0, count).forEach((name) => {
-          updated[`${name}_${date}`] = type;
-        });
-      }
-      uniqueNames.forEach((name) => {
-        if (!updated[`${name}_${date}`]) updated[`${name}_${date}`] = "◯";
-      });
-    });
-    setShiftMatrix(updated);
-    alert("AIによる仮割り当てが完了しました！");
+  const handleChange = (empId, date, value) => {
+    setShiftMatrix((prev) => ({
+      ...prev,
+      [`${empId}_${date}`]: value,
+    }));
   };
 
-  // 催促メール送信
-  const handleSendReminders = async () => {
-    const results = [];
-    for (const name of unsubmitted) {
-      const staff = staffList.find((s) => s.name === name);
-      const email = staff?.email;
-      if (!email) {
-        results.push(`${name}：メールアドレス未登録`);
-        continue;
-      }
-      try {
-        await emailjs.send(EMAIL_SERVICE_ID, EMAIL_TEMPLATE_ID, { name, to_email: email }, EMAIL_PUBLIC_KEY);
-        results.push(`${name}：送信成功`);
-      } catch (err) {
-        console.error(`${name}へのメール送信エラー:`, err);
-        results.push(`${name}：送信失敗`);
-      }
-    }
-    alert("催促結果：\n" + results.join("\n"));
+  const getDisplayName = (empId) => {
+    const staff = staffList.find((s) => s.employeeId === empId);
+    return staff ? `${staff.lastName} ${staff.firstName}` : empId;
   };
 
-  // CSV出力
-  const handleCSVDownload = () => {
-    let csv = ["名前", ...dates].join(",") + "\n";
-    uniqueNames.forEach((name) => {
-      const row = [name];
-      dates.forEach((date) => row.push(shiftMatrix[`${name}_${date}`] || ""));
-      csv += row.join(",") + "\n";
-    });
-    saveAs(new Blob([csv], { type: "text/csv" }), `${dayjs().year()}-${currentMonth}_shift.csv`);
-  };
-
-  // ラベル用
   const getHopeLabel = (key) => {
     if (hopes[key] === "off") return "休み希望";
     if (hopes[key] === "night") return "夜勤希望";
-    if (hopes[key] === "none") return "希望なし"; // "none"を「希望なし」として表示
+    if (hopes[key] === "none") return "希望なし";
     return "";
   };
-  
+
   const getEventLabel = (key) => (events[key] ? `🔔${events[key]}` : "");
 
-  // 未ログイン時
   if (!currentUser) return <p>ログイン中...</p>;
-  
-  // データ読み込み中
+
   if (loading) return (
     <div style={{ padding: "1rem", fontFamily: "sans-serif", textAlign: "center" }}>
       <Header />
@@ -320,10 +240,8 @@ function Admin() {
 
   return (
     <div style={{ padding: "1rem", overflowX: "auto", fontFamily: "sans-serif" }}>
-      {/* 共通ヘッダー */}
       <Header />
-
-      <div style={{ padding: "1rem", fontFamily: "sans-serif", overflowX: "scroll" }}>
+      <div style={{ padding: "1rem" }}>
         <h1>{`${dayjs().year()}年${currentMonth}月のシフト作成画面`}</h1>
 
         {/* 月切り替え */}
@@ -333,14 +251,26 @@ function Admin() {
           <button onClick={() => setCurrentMonth((p) => (p === 12 ? 1 : p + 1))}>翌月 ▶</button>
         </div>
 
+        {/* 保存ボタン */}
+        <div style={{ margin: "1rem 0" }}>
+          <button
+            onClick={handleSave}
+            style={{
+              padding: "1rem",
+              backgroundColor: "#4285F4",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              fontSize: "1rem",
+              cursor: "pointer",
+            }}
+          >
+            💾 シフトを保存
+          </button>
+        </div>
+
         {/* 凡例 */}
-        <div style={{ 
-          display: "flex", 
-          gap: "1rem", 
-          margin: "1rem 0", 
-          fontSize: "0.85rem",
-          flexWrap: "wrap" 
-        }}>
+        <div style={{ display: "flex", gap: "1rem", margin: "1rem 0", fontSize: "0.85rem", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center" }}>
             <div style={{ width: "16px", height: "16px", backgroundColor: "#ffebee", marginRight: "4px", border: "1px solid #ccc" }}></div>
             <span>希望未提出スタッフ</span>
@@ -359,87 +289,7 @@ function Admin() {
           </div>
         </div>
 
-        {/* 操作ボタン */}
-        <div style={{ 
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "1rem",
-          margin: "1rem 0", 
-        }}>
-          <button
-            onClick={handleSave}
-            style={{
-              flex: "1 1 calc(50% - 1rem)",
-              padding: "1rem",
-              backgroundColor: "#4285F4",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "1rem",
-              cursor: "pointer",
-            }}
-          >
-            💾 シフトを保存
-          </button>
-
-          <button
-            onClick={handleAutoAssign}
-            style={{
-              flex: "1 1 calc(50% - 1rem)",
-              padding: "1rem",
-              backgroundColor: "#FBBC05",
-              color: "#333",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "1rem",
-              cursor: "pointer",
-            }}
-          >
-            🤖 AI仮割り当て
-          </button>
-
-          <button
-            onClick={handleCSVDownload}
-            style={{
-              flex: "1 1 calc(50% - 1rem)",
-              padding: "1rem",
-              backgroundColor: "#34A853",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "1rem",
-              cursor: "pointer",
-            }}
-          >
-            📑 CSV出力
-          </button>
-
-          <button
-            onClick={handleSendReminders}
-            style={{
-              flex: "1 1 calc(50% - 1rem)",
-              padding: "1rem",
-              backgroundColor: "#EA4335",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "1rem",
-              cursor: "pointer",
-            }}
-          >
-            ✉️ 未提出者催促
-          </button>
-        </div>
-
-        {/* 未提出者 */}
-        <div style={{ marginBottom: "1rem" }}>
-          <strong>未提出者（{unsubmitted.length}名）：</strong>
-          <div style={{ maxHeight: "150px", overflowY: "auto", border: "1px solid #ccc", padding: "0.5rem" }}>
-            <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
-              {unsubmitted.map((n) => <li key={n}>{n}</li>)}
-            </ul>
-          </div>
-        </div>
+        
 
         {/* シフト表 */}
         <table style={{ borderCollapse: "collapse", minWidth: "800px" }}>
@@ -454,58 +304,37 @@ function Admin() {
             </tr>
           </thead>
           <tbody>
-            {uniqueNames.map((name) => {
-              const hasSubmitted = submittedStaff.has(name);
-              
+            {uniqueEmployeeIds.map((empId) => {
+              const hasSubmitted = submittedStaffIds.has(empId);
               return (
-                <tr key={name}>
-                  <td style={{ 
-                    ...tdStyle, 
-                    backgroundColor: hasSubmitted ? "white" : "#ffebee",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    minWidth: "150px"
-                  }}>
-                    <span>{name}</span>
-                    {!hasSubmitted && (
-                      <span style={{ 
-                        fontSize: "0.7rem", 
-                        color: "#e53935",
-                        marginLeft: "4px",
-                        whiteSpace: "nowrap"
-                      }}>
-                        [未提出]
-                      </span>
-                    )}
+                <tr key={empId}>
+                  <td style={{ ...tdStyle, backgroundColor: hasSubmitted ? "white" : "#ffebee" }}>
+                    {getDisplayName(empId)}
                   </td>
                   {dates.map((date) => {
-                    const key = `${name}_${date}`;
-                    // 希望マップから希望を取得
+                    const key = `${empId}_${date}`;
                     const hopeValue = hopes[key];
-                    
-                    // 背景色の決定（none も考慮）
-                    const bg = 
+                    const bg =
                       !hasSubmitted ? "#fff8e1" :
                       hopeValue === "off" ? "#e0f7fa" :
-                      hopeValue === "night" ? "#fce4ec" : 
-                      hopeValue === "none" ? "#f9f9f9" :
-                      "white";
-                      
+                      hopeValue === "night" ? "#fce4ec" :
+                      hopeValue === "none" ? "#f9f9f9" : "white";
                     return (
-                      <td key={key} style={{ ...tdStyle, backgroundColor: bg, textAlign: "center" }}>
+                      <td key={key} style={{ ...tdStyle, backgroundColor: bg }}>
                         <div style={{ fontSize: "0.7rem", color: "#666" }}>
-                          {!hasSubmitted ? 
-                            "希望未提出" : 
-                            getHopeLabel(key)} 
+                          {!hasSubmitted ? "希望未提出" : getHopeLabel(key)}
                           {getEventLabel(key)}
                         </div>
                         <select
                           value={shiftMatrix[key] || ""}
-                          onChange={(e) => handleChange(name, date, e.target.value)}
+                          onChange={(e) => handleChange(empId, date, e.target.value)}
                           style={{ width: "50px", marginTop: "2px" }}
                         >
-                          {shiftOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                          {shiftOptions.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
                         </select>
                       </td>
                     );
@@ -513,43 +342,83 @@ function Admin() {
                 </tr>
               );
             })}
+            {/* ▼▼▼ 人数カウント行 ▼▼▼ */}
+<tr>
+  <td style={{ ...tdStyle, fontWeight: "bold", backgroundColor: "#e0f7fa" }}>
+    日
+  </td>
+  {dates.map((date) => (
+    <td key={`day_${date}`} style={{ ...tdStyle, backgroundColor: "#e0f7fa", textAlign: "center", fontWeight: "bold" }}>
+      {dayShiftCount[date] || 0}
+    </td>
+  ))}
+</tr>
+
+<tr>
+  <td style={{ ...tdStyle, fontWeight: "bold", backgroundColor: "#fce4ec" }}>
+    夜
+  </td>
+  {dates.map((date) => (
+    <td key={`night_${date}`} style={{ ...tdStyle, backgroundColor: "#fce4ec", textAlign: "center", fontWeight: "bold" }}>
+      {nightShiftCount[date] || 0}
+    </td>
+  ))}
+</tr>
+
+<tr>
+  <td style={{ ...tdStyle, fontWeight: "bold", backgroundColor: "#fce4ec" }}>
+    当
+  </td>
+  {dates.map((date) => (
+    <td key={`oncall_${date}`} style={{ ...tdStyle, backgroundColor: "#fce4ec", textAlign: "center", fontWeight: "bold" }}>
+      {onCallDutyCount[date] || 0}
+    </td>
+  ))}
+</tr>
+
+<tr>
+  <td style={{ ...tdStyle, fontWeight: "bold", backgroundColor: "#e8f5e9" }}>
+    遅C
+  </td>
+  {dates.map((date) => (
+    <td key={`latec_${date}`} style={{ ...tdStyle, backgroundColor: "#e8f5e9", textAlign: "center", fontWeight: "bold" }}>
+      {lateCShiftCount[date] || 0}
+    </td>
+  ))}
+</tr>
+
+<tr>
+  <td style={{ ...tdStyle, fontWeight: "bold", backgroundColor: "#fff3e0" }}>
+    ｵﾛ
+  </td>
+  {dates.map((date) => (
+    <td key={`oncallsh_${date}`} style={{ ...tdStyle, backgroundColor: "#fff3e0", textAlign: "center", fontWeight: "bold" }}>
+      {onCallShiftCount[date] || 0}
+    </td>
+  ))}
+</tr>
+
+<tr>
+  <td style={{ ...tdStyle, fontWeight: "bold", backgroundColor: "#ede7f6" }}>
+    F
+  </td>
+  {dates.map((date) => (
+    <td key={`free_${date}`} style={{ ...tdStyle, backgroundColor: "#ede7f6", textAlign: "center", fontWeight: "bold" }}>
+      {freeShiftCount[date] || 0}
+    </td>
+  ))}
+</tr>
+
           </tbody>
         </table>
 
         {/* 改善提案 */}
         {showFeedback
           ? <FeedbackForm onClose={() => setShowFeedback(false)} />
-          : <button onClick={() => setShowFeedback(true)} style={{ marginTop: "1rem" }}>改善提案を送る</button>
+          : <button onClick={() => setShowFeedback(true)} style={{ marginTop: "1rem" }}>
+              改善提案を送る
+            </button>
         }
-        
-        {/* 開発者向けヘルパーボタン */}
-        <div style={{ marginTop: "2rem", borderTop: "1px solid #ccc", paddingTop: "1rem" }}>
-          <button 
-            onClick={() => console.log("現在の希望データ:", hopes)}
-            style={{ marginRight: "0.5rem", fontSize: "0.8rem" }}
-          >
-            希望データをログ
-          </button>
-          <button 
-            onClick={() => console.log("提出済みスタッフ:", [...submittedStaff])}
-            style={{ marginRight: "0.5rem", fontSize: "0.8rem" }}
-          >
-            提出者をログ
-          </button>
-          <button 
-            onClick={() => {
-              // 提出された希望のデバッグ
-              Object.entries(hopes).forEach(([key, value]) => {
-                if (value && value !== "") {
-                  console.log(`希望あり: ${key} = ${value}`);
-                }
-              });
-            }}
-            style={{ fontSize: "0.8rem" }}
-          >
-            有効な希望をログ
-          </button>
-        </div>
       </div>
     </div>
   );

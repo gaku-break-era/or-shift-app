@@ -2,60 +2,110 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Header from "./components/ui/Header";
 import { db } from "./firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, getDoc, getDocs, doc } from "firebase/firestore";
 import dayjs from "dayjs";
+import { getAuth } from "firebase/auth";
 
 const StaffHome = () => {
   const [thisWeekShift, setThisWeekShift] = useState([]);
   const [selectedDate, setSelectedDate] = useState(dayjs().format("YYYY-MM-DD"));
-  const [todayIndex, setTodayIndex] = useState(null);
   const [mySurgeries, setMySurgeries] = useState([]);
-  const staffId = "kawase"; // 仮ユーザーID
+  const [myEmployeeId, setMyEmployeeId] = useState("");
+  const [weeklyShiftMap, setWeeklyShiftMap] = useState({});
 
   useEffect(() => {
-    const start = dayjs().startOf("week").add(1, "day"); // 月曜スタート
-    const dates = Array.from({ length: 7 }, (_, i) => start.add(i, "day"));
-    const formatted = dates.map(d => ({
-      label: d.format("dd"),
-      date: d.format("YYYY-MM-DD"),
-      short: d.format("M/D")
-    }));
-    setThisWeekShift(formatted);
-    const today = dayjs().format("YYYY-MM-DD");
-    const todayIdx = formatted.findIndex(f => f.date === today);
-    setTodayIndex(todayIdx);
-    setSelectedDate(today);
+    const auth = getAuth();
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        try {
+          const staffDoc = await getDoc(doc(db, "staffList", user.uid));
+          if (staffDoc.exists()) {
+            setMyEmployeeId(staffDoc.data().employeeId);
+          } else {
+            console.error("スタッフ情報が見つかりませんでした");
+          }
+        } catch (err) {
+          console.error("スタッフ情報取得エラー:", err);
+        }
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const fetchShiftAndSurgeries = async () => {
-      if (!selectedDate) return;
+    const today = dayjs();
+    const dates = Array.from({ length: 7 }, (_, i) => today.add(i - 3, "day"));
+    const formatted = dates.map(d => ({
+      label: d.format("dd"), // 曜日
+      date: d.format("YYYY-MM-DD"),
+      short: d.format("M/D"),
+      dayOfWeek: d.day() // 0(日)〜6(土)
+    }));
+    setThisWeekShift(formatted);
+    setSelectedDate(today.format("YYYY-MM-DD"));
+  }, []);
 
-      // Shift 取得
-      const shiftSnap = await getDocs(query(
-        collection(db, "shifts"),
-        where("staffId", "==", staffId),
-        where("date", "==", selectedDate)
-      ));
-      const shiftData = shiftSnap.docs[0]?.data()?.type || "ー";
+  useEffect(() => {
+    const fetchWeeklyShift = async () => {
+      if (!myEmployeeId) return;
 
-      // 手術スケジュール取得
-      const surgerySnap = await getDocs(query(
-        collection(db, "surgerySchedules"),
-        where("date", "==", selectedDate)
-      ));
-      const myAssigned = surgerySnap.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(s => 
-          s.scrub?.id === staffId || 
-          s.circulating?.id === staffId || 
-          s.scrubInstructor?.id === staffId || 
-          s.circulatingInstructor?.id === staffId
-        );
-      setMySurgeries(myAssigned);
+      const today = dayjs();
+      const monthDocId = `${today.year()}年${today.month() + 1}月`;
+      try {
+        const shiftDocSnap = await getDoc(doc(db, "shiftSchedules", monthDocId));
+        if (shiftDocSnap.exists()) {
+          const shiftData = shiftDocSnap.data();
+          const myShiftData = shiftData[myEmployeeId] || {};
+          const weeklyData = {};
+
+          const dates = Array.from({ length: 7 }, (_, i) => today.add(i - 3, "day"));
+          dates.forEach((d) => {
+            const dateStr = d.format("YYYY-MM-DD");
+            weeklyData[dateStr] = myShiftData[dateStr] || "ー";
+          });
+          setWeeklyShiftMap(weeklyData);
+        }
+      } catch (err) {
+        console.error("今週のシフト取得エラー:", err);
+      }
     };
-    fetchShiftAndSurgeries();
-  }, [selectedDate]);
+    fetchWeeklyShift();
+  }, [myEmployeeId]);
+
+  useEffect(() => {
+    const fetchMySurgeries = async () => {
+      if (!selectedDate || !myEmployeeId) return;
+      try {
+        const surgerySnap = await getDocs(collection(db, "surgerySchedules"));
+        const selectedDaySurgeries = surgerySnap.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(doc => doc.date === selectedDate);
+
+        const myAssigned = selectedDaySurgeries.filter(s => 
+          s.scrub?.id === myEmployeeId || 
+          s.circulating?.id === myEmployeeId || 
+          s.scrubInstructor?.id === myEmployeeId || 
+          s.circulatingInstructor?.id === myEmployeeId
+        );
+        setMySurgeries(myAssigned);
+      } catch (err) {
+        console.error("手術情報読み込みエラー:", err);
+        setMySurgeries([]);
+      }
+    };
+    fetchMySurgeries();
+  }, [selectedDate, myEmployeeId]);
+
+  const getWeekdayLabel = (dayOfWeek) => {
+    const labels = ["日", "月", "火", "水", "木", "金", "土"];
+    return labels[dayOfWeek];
+  };
+
+  const getWeekdayColor = (dayOfWeek) => {
+    if (dayOfWeek === 0) return "red";    // 日曜日
+    if (dayOfWeek === 6) return "blue";   // 土曜日
+    return "#333";                        // 平日
+  };
 
   return (
     <div style={{ padding: "1rem", fontFamily: "sans-serif", maxWidth: "600px", margin: "0 auto" }}>
@@ -78,8 +128,13 @@ const StaffHome = () => {
                 cursor: "pointer"
               }}
             >
-              <div>{item.label}</div>
+              <div style={{ color: getWeekdayColor(item.dayOfWeek), fontWeight: "bold" }}>
+                {getWeekdayLabel(item.dayOfWeek)}
+              </div>
               <div style={{ fontSize: "0.8rem", color: "#666" }}>{item.short}</div>
+              <div style={{ fontSize: "0.9rem", fontWeight: "bold" }}>
+                {weeklyShiftMap[item.date] || "ー"}
+              </div>
             </div>
           ))}
         </div>

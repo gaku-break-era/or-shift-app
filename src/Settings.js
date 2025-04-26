@@ -2,13 +2,13 @@ import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
   collection,
-  addDoc,
   getDocs,
   deleteDoc,
   doc,
   updateDoc,
   setDoc,
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";  // ★ 追加
 import "./Settings.css";
 import Header from "./components/ui/Header";
 
@@ -40,6 +40,14 @@ function Settings() {
   }, []);
 
   const handleAdd = async () => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      alert("ログインが必要です。");
+      return;
+    }
+
     try {
       const exists = staffList.some((s) => s.employeeId === staff.id);
       if (exists) {
@@ -47,7 +55,8 @@ function Settings() {
         return;
       }
 
-      const newStaffRef = await addDoc(collection(db, "staffList"), {
+      // UIDをドキュメントIDにして保存！
+      await setDoc(doc(db, "staffList", staff.id), {
         employeeId: staff.id,
         lastName: staff.lastName,
         firstName: staff.firstName,
@@ -56,28 +65,7 @@ function Settings() {
         role: staff.role,
       });
 
-      console.log("新規スタッフID:", newStaffRef.id);
-
-      const proceduresRef = collection(db, "procedures");
-      console.log("🟡 proceduresRef:", proceduresRef);
-
-      const procSnap = await getDocs(proceduresRef);
-      console.log("✅ procSnap.docs.length:", procSnap.docs.length);
-
-      if (procSnap.docs.length === 0) {
-        console.warn("⚠️ procedures にデータが存在しません！");
-      }
-
-      for (const proc of procSnap.docs) {
-        const recordId = `${newStaffRef.id}_${proc.id}`;
-        console.log("→ skillRecord 作成:", recordId);
-
-        await setDoc(doc(db, "skillRecords", recordId), {
-          userId: newStaffRef.id,
-          procedureId: proc.id,
-          level: "未経験",
-        });
-      }
+      console.log("新規スタッフ登録完了！UID:", currentUser.uid);
 
       setStaff({
         id: "",
@@ -89,7 +77,7 @@ function Settings() {
       });
       fetchStaff();
     } catch (err) {
-      console.error("❌ エラー発生:", err);
+      console.error("❌ 登録エラー:", err);
     }
   };
 
