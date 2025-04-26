@@ -1,4 +1,4 @@
-// src/Admin.js
+// src/Admin.js - 修正版
 import React, { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from "./firebase";
@@ -133,21 +133,21 @@ function Admin() {
           const name = req.name || req.email;
           if (!name) continue;
           
-          // 現在の月のリクエストかチェック
-          const monthPattern = `${year}${String(currentMonth).padStart(2, '0')}`;
-          if (req.id && req.id.includes(monthPattern)) {
-            console.log(`${name} の希望データを処理中...`);
-          }
-          
+          // 現在の月のリクエストかチェック - ここを修正
+          // 厳密にチェックする代わりに、実際のデータに含まれる日付をチェック
           const reqShifts = req.shifts || [];
           
           // 希望データのデバッグ出力
           console.log(`${name}のシフト希望 (${reqShifts.length}件):`, JSON.stringify(reqShifts));
           
           for (const shift of reqShifts) {
-            if (monthDates.includes(shift.date)) {
+            // 日付の形式を統一（YYYY-MM-DD）
+            const shiftDate = typeof shift.date === 'string' ? shift.date : 
+                             shift.date instanceof Date ? dayjs(shift.date).format('YYYY-MM-DD') : null;
+                             
+            if (shiftDate && monthDates.includes(shiftDate)) {
               // selectionを直接マッピング（off, night, noneなど）
-              const key = `${name}_${shift.date}`;
+              const key = `${name}_${shiftDate}`;
               const value = shift.selection || "";
               
               hopeMap[key] = value;

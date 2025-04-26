@@ -1,10 +1,10 @@
-// src/MobileShiftForm.js
+// src/MobileShiftForm.js - 修正版
 import React, { useState, useEffect } from "react";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from "./firebase";
 import "./CalendarStyles.css";
-import Header from "./components/ui/Header"; // ✅ 共通ヘッダーをインポート
+import Header from "./components/ui/Header";
 
 function MobileShiftForm() {
   const today = new Date();
@@ -93,8 +93,9 @@ function MobileShiftForm() {
     const month = targetMonth.getMonth() + 1;
     const docId = `${user.displayName || user.email}_${year}${String(month).padStart(2, "0")}`;
 
+    // 変更点: shiftsの構造を修正して一貫性を保つ
     const shifts = Object.entries(shiftData).map(([date, value]) => ({
-      date,
+      date, // date はシンプルに YYYY-MM-DD 形式の文字列
       selection: value.type,
       comment: value.comment || "",
     }));
@@ -108,6 +109,7 @@ function MobileShiftForm() {
 
     try {
       await setDoc(doc(db, "shiftRequests", docId), dataToSend);
+      console.log("送信データ:", dataToSend); // デバッグ用
       setSubmitStatus("送信が完了しました！");
     } catch (err) {
       console.error("送信エラー:", err);
@@ -128,7 +130,7 @@ function MobileShiftForm() {
 
   return (
     <div className="mobile-form">
-      <Header /> {/* ✅ 共通ヘッダーに差し替え */}
+      <Header />
 
       <h2 className="month-title">
         {targetMonth.getFullYear()}年{targetMonth.getMonth() + 1}月 シフト希望
