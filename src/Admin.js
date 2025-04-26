@@ -1,4 +1,3 @@
-// src/Admin.js
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import { db } from "./firebase";
@@ -7,6 +6,7 @@ import { saveAs } from "file-saver";
 import emailjs from "@emailjs/browser";
 import { isWeekend } from "date-fns";
 import FeedbackForm from "./FeedbackForm";
+import dayjs from "dayjs";
 
 function Admin() {
   const [events, setEvents] = useState({});
@@ -19,6 +19,7 @@ function Admin() {
   const [staffList, setStaffList] = useState([]);
   const [unsubmitted, setUnsubmitted] = useState([]);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(dayjs()); // ✅ 追加
 
   const EMAIL_SERVICE_ID = "service_12m5w0v";
   const EMAIL_TEMPLATE_ID = "template_gmkbnq8";
@@ -234,9 +235,9 @@ function Admin() {
   };
 
   const formatDateShort = (dateStr) => {
-    const date = new Date(dateStr);
-    const weekday = "日月火水木金土"[date.getDay()];
-    return `${date.getDate()}(${weekday})`;
+    const dateObj = dayjs(dateStr);
+    const weekday = "日月火水木金土"[dateObj.day()];
+    return `${dateObj.date()}(${weekday})`;
   };
 
   const getHopeLabel = (key) => {
@@ -249,16 +250,28 @@ function Admin() {
     return events[key] ? `🔔${events[key]}` : "";
   };
 
+  const shuffleArray = (array) => {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
+
   if (!currentUser) {
     return <p>ログイン中のユーザーを確認しています...</p>;
   }
 
-  // ✅ アクセス制限解除中
-  console.log("現在のユーザー:", currentUser?.email);
-
   return (
     <div style={{ padding: "1rem", fontFamily: "sans-serif", overflowX: "scroll" }}>
       <h1>{getMonthYearTitle()}のシフト作成画面</h1>
+
+      <div style={{ marginBottom: "1rem" }}>
+        <button onClick={() => setCurrentMonth((prev) => prev.subtract(1, "month"))}>←前月</button>
+        <button onClick={() => setCurrentMonth((prev) => prev.add(1, "month"))} style={{ marginLeft: "1rem" }}>翌月→</button>
+      </div>
+
       <button onClick={handleSave}>シフトを保存</button>
       <button onClick={handleAutoAssign} style={{ marginLeft: "1rem" }}>AI仮割り当て</button>
       <button onClick={handleCSVDownload} style={{ marginLeft: "1rem" }}>CSV出力</button>
@@ -312,14 +325,5 @@ function Admin() {
     </div>
   );
 }
-
-const shuffleArray = (array) => {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-};
 
 export default Admin;
