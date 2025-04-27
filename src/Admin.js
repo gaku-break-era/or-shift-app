@@ -11,6 +11,7 @@ import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import FeedbackForm from "./FeedbackForm";
 import Header from "./components/ui/Header";
+import { calculateRequiredStaff, applyHopes, assignBalancedNightShifts } from "./utils/shiftAutoAssign";
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
@@ -20,7 +21,14 @@ const defaultMonth = today.date() <= 10
   : today.add(2, "month").month() + 1;
 
 const thStyle = { border: "1px solid #ccc", padding: "4px", background: "#fafafa" };
-const tdStyle = { border: "1px solid #ccc", padding: "4px" };
+const tdStyle = { 
+  border: "1px solid #ccc", 
+  padding: "4px", 
+  minHeight: "80px", 
+  minWidth: "100px",
+  fontSize: "0.8rem",
+};
+
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -81,16 +89,24 @@ const [freeShiftCount, setFreeShiftCount] = useState({});
       setDates(monthDates);
 
       const staffSnap = await getDocs(collection(db, "staffList"));
-      const staffData = staffSnap.docs.map((d) => ({
-        id: d.id,
-        employeeId: d.data().employeeId,
-        lastName: d.data().lastName,
-        firstName: d.data().firstName,
-        email: d.data().email || "",
-      }));
-      setStaffList(staffData);
+const rawStaffData = staffSnap.docs.map((d) => ({
+  id: d.id,
+  employeeId: d.data().employeeId,
+  lastName: d.data().lastName,
+  firstName: d.data().firstName,
+  email: d.data().email || "",
+  year: d.data().year || "9999", // ← 念のためyearも取る
+}));
 
-      const registeredEmployeeIds = staffData.map((s) => s.employeeId);
+// 🔥ここで rawStaffData を year昇順にソート！
+const sortedStaffData = rawStaffData.sort((a, b) => {
+  return Number(a.year) - Number(b.year);
+});
+
+setStaffList(sortedStaffData);
+      
+
+      const registeredEmployeeIds = sortedStaffData.map((s) => s.employeeId);
       setUniqueEmployeeIds(registeredEmployeeIds);
 
       const reqSnap = await getDocs(collection(db, "shiftRequests"));
@@ -206,7 +222,64 @@ const [freeShiftCount, setFreeShiftCount] = useState({});
       console.error(err);
       alert("保存に失敗しました。");
     }
+  };  
+
+  const handleAutoAssign = () => {
+    const requiredStaff = calculateRequiredStaff(dates);
+    let updatedMatrix = applyHopes(shiftMatrix, uniqueEmployeeIds, dates, hopes);
+    updatedMatrix = assignBalancedNightShifts(updatedMatrix, uniqueEmployeeIds, dates, hopes, requiredStaff);
+    
+    Object.keys(updatedMatrix).forEach((key) => {
+      if (!updatedMatrix[key]) {
+        updatedMatrix[key] = "◯";
+      }
+    });
+    
+    setShiftMatrix(updatedMatrix);
+    alert("AIによる仮割り当てが完了しました！");
   };
+  
+    
+  
+  const handleCSVDownload = () => {
+    let csv = ["社員番号", "氏名", ...dates].join(",") + "\n";
+    uniqueEmployeeIds.forEach((empId) => {
+      const staff = staffList.find(s => s.employeeId === empId);
+      const name = staff ? `${staff.lastName} ${staff.firstName}` : empId;
+      const row = [empId, name];
+      dates.forEach((date) => {
+        row.push(shiftMatrix[`${empId}_${date}`] || "");
+      });
+      csv += row.join(",") + "\n";
+    });
+    saveAs(new Blob([csv], { type: "text/csv" }), `${dayjs().year()}-${currentMonth}_shift.csv`);
+  };
+
+  const handleSendReminders = async () => {
+    const results = [];
+    for (const empId of unsubmitted) {
+      const staff = staffList.find((s) => s.employeeId === empId);
+      const email = staff?.email;
+      if (!email) {
+        results.push(`${empId}：メールアドレス未登録`);
+        continue;
+      }
+      try {
+        await emailjs.send(
+          EMAIL_SERVICE_ID,
+          EMAIL_TEMPLATE_ID,
+          { name: `${staff.lastName} ${staff.firstName}`, to_email: email },
+          EMAIL_PUBLIC_KEY
+        );
+        results.push(`${empId}：送信成功`);
+      } catch (err) {
+        console.error(`${empId}へのメール送信エラー:`, err);
+        results.push(`${empId}：送信失敗`);
+      }
+    }
+    alert("催促結果：\n" + results.join("\n"));
+  };
+  
 
   const handleChange = (empId, date, value) => {
     setShiftMatrix((prev) => ({
@@ -252,22 +325,80 @@ const [freeShiftCount, setFreeShiftCount] = useState({});
         </div>
 
         {/* 保存ボタン */}
-        <div style={{ margin: "1rem 0" }}>
-          <button
-            onClick={handleSave}
-            style={{
-              padding: "1rem",
-              backgroundColor: "#4285F4",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "1rem",
-              cursor: "pointer",
-            }}
-          >
-            💾 シフトを保存
-          </button>
-        </div>
+        {/* 操作ボタン列 */}
+<div style={{ 
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "1rem",
+  margin: "1rem 0"
+}}>
+  <button
+    onClick={handleSave}
+    style={{
+      flex: "1 1 calc(50% - 1rem)",
+      padding: "1rem",
+      backgroundColor: "#4285F4",
+      color: "white",
+      border: "none",
+      borderRadius: "8px",
+      fontSize: "1rem",
+      cursor: "pointer",
+    }}
+  >
+    💾 シフトを保存
+  </button>
+
+  <button
+    onClick={handleAutoAssign}
+    style={{
+      flex: "1 1 calc(50% - 1rem)",
+      padding: "1rem",
+      backgroundColor: "#FBBC05",
+      color: "#333",
+      border: "none",
+      borderRadius: "8px",
+      fontSize: "1rem",
+      cursor: "pointer",
+    }}
+  >
+    🤖 AI仮割り当て
+  </button>
+
+  <button
+    onClick={handleCSVDownload}
+    style={{
+      flex: "1 1 calc(50% - 1rem)",
+      padding: "1rem",
+      backgroundColor: "#34A853",
+      color: "white",
+      border: "none",
+      borderRadius: "8px",
+      fontSize: "1rem",
+      cursor: "pointer",
+    }}
+  >
+    📑 CSV出力
+  </button>
+
+  <button
+    onClick={handleSendReminders}
+    style={{
+      flex: "1 1 calc(50% - 1rem)",
+      padding: "1rem",
+      backgroundColor: "#EA4335",
+      color: "white",
+      border: "none",
+      borderRadius: "8px",
+      fontSize: "1rem",
+      cursor: "pointer",
+    }}
+  >
+    ✉️ 未提出者催促
+  </button>
+</div>
+
+
+        
 
         {/* 凡例 */}
         <div style={{ display: "flex", gap: "1rem", margin: "1rem 0", fontSize: "0.85rem", flexWrap: "wrap" }}>
@@ -292,25 +423,52 @@ const [freeShiftCount, setFreeShiftCount] = useState({});
         
 
         {/* シフト表 */}
-        <table style={{ borderCollapse: "collapse", minWidth: "800px" }}>
-          <thead>
-            <tr>
-              <th style={thStyle}>名前</th>
-              {dates.map((date) => (
-                <th key={date} style={thStyle}>
-                  {dayjs(date).date()}({["日","月","火","水","木","金","土"][dayjs(date).day()]})
-                </th>
-              ))}
-            </tr>
-          </thead>
+        <div style={{ overflowX: "auto", width: "100%", border: "1px solid #ccc" }}>
+        <table style={{ borderCollapse: "collapse", minWidth: "1200px", tableLayout: "fixed" }}>
+
+        <thead>
+          <tr>
+            <th style={{
+              ...thStyle,
+              position: "sticky",
+              top: 0,
+              backgroundColor: "#fff",
+              zIndex: 2,
+            }}>
+              名前
+            </th>
+            {dates.map((date) => (
+              <th key={date} style={{
+                ...thStyle,
+                position: "sticky",
+                top: 0,
+                backgroundColor: "#fff",
+                zIndex: 2,
+              }}>
+                {dayjs(date).date()}({["日","月","火","水","木","金","土"][dayjs(date).day()]})
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+
           <tbody>
             {uniqueEmployeeIds.map((empId) => {
               const hasSubmitted = submittedStaffIds.has(empId);
               return (
                 <tr key={empId}>
-                  <td style={{ ...tdStyle, backgroundColor: hasSubmitted ? "white" : "#ffebee" }}>
-                    {getDisplayName(empId)}
-                  </td>
+                  <td style={{
+                  ...tdStyle,
+                  backgroundColor: hasSubmitted ? "white" : "#ffebee",
+                  position: "sticky",
+                  left: 0,
+                  zIndex: 1,
+                  minWidth: "140px",
+                  fontWeight: "bold",
+                }}>
+                  {getDisplayName(empId)}
+                </td>
+
                   {dates.map((date) => {
                     const key = `${empId}_${date}`;
                     const hopeValue = hopes[key];
@@ -411,6 +569,7 @@ const [freeShiftCount, setFreeShiftCount] = useState({});
 
           </tbody>
         </table>
+        </div>
 
         {/* 改善提案 */}
         {showFeedback
