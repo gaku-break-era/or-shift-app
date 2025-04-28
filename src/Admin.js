@@ -226,26 +226,34 @@ setStaffList(sortedStaffData);
       // ① shiftSchedulesに保存（従来通り）
       await setDoc(doc(db, "shiftSchedules", monthTitle), dataToSave);
   
-      // ② shiftsコレクションにも保存（追加！）
-      const batchWrites = [];
+      // ② shiftsコレクションにも保存（改良版）
+      const batch = writeBatch(db);
+      
+      // 対象月の全日付分を処理
       uniqueEmployeeIds.forEach((empId) => {
         dates.forEach((date) => {
           const type = shiftMatrix[`${empId}_${date}`] || "";
-  
+          
+          // すべての日付に対してドキュメントを作成（空の場合は削除）
+          const shiftRef = doc(db, "shifts", `${empId}_${date}`);
+          
           if (type) {
-            const shiftRef = doc(db, "shifts", `${empId}_${date}`);
-            batchWrites.push(setDoc(shiftRef, {
+            // シフトがある場合はデータ作成
+            batch.set(shiftRef, {
               staffId: empId,
               date,
               type,
               updatedAt: dayjs().toISOString(),
-            }));
+            });
+          } else {
+            // シフトがない場合は明示的に削除
+            batch.delete(shiftRef);
           }
         });
       });
   
-      // バッチ実行（Promise.allで並列に）
-      await Promise.all(batchWrites);
+      // バッチ実行（一括で処理）
+      await batch.commit();
   
       alert("シフトを保存しました！（ホーム画面にも反映）");
   
