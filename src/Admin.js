@@ -11,7 +11,14 @@ import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import FeedbackForm from "./FeedbackForm";
 import Header from "./components/ui/Header";
-import { calculateRequiredStaff, applyHopes, assignBalancedNightShifts } from "./utils/shiftAutoAssign";
+import { 
+  calculateRequiredStaff, 
+  applyHopes, 
+  fillShifts, 
+  assignBalancedNightShifts 
+} from "./utils/shiftAutoAssign";
+import { writeBatch } from "firebase/firestore"; // ← これ追加！！
+
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
@@ -206,38 +213,79 @@ setStaffList(sortedStaffData);
   const handleSave = async () => {
     try {
       const dataToSave = {};
+      const year = dayjs().year();
+      const monthTitle = `${year}年${currentMonth}月`;
+  
       uniqueEmployeeIds.forEach((empId) => {
         dataToSave[empId] = {};
         dates.forEach((date) => {
           dataToSave[empId][date] = shiftMatrix[`${empId}_${date}`] || "";
         });
       });
-      const title = `${dayjs().year()}年${currentMonth}月`;
-      await setDoc(doc(db, "shiftSchedules", title), dataToSave);
-      alert("シフトを保存しました！");
-
-      // 保存後に再取得！！
+  
+      // ① shiftSchedulesに保存（従来通り）
+      await setDoc(doc(db, "shiftSchedules", monthTitle), dataToSave);
+  
+      // ② shiftsコレクションにも保存（追加！）
+      const batchWrites = [];
+      uniqueEmployeeIds.forEach((empId) => {
+        dates.forEach((date) => {
+          const type = shiftMatrix[`${empId}_${date}`] || "";
+  
+          if (type) {
+            const shiftRef = doc(db, "shifts", `${empId}_${date}`);
+            batchWrites.push(setDoc(shiftRef, {
+              staffId: empId,
+              date,
+              type,
+              updatedAt: dayjs().toISOString(),
+            }));
+          }
+        });
+      });
+  
+      // バッチ実行（Promise.allで並列に）
+      await Promise.all(batchWrites);
+  
+      alert("シフトを保存しました！（ホーム画面にも反映）");
+  
+      // 保存後に再取得
       fetchData();
     } catch (err) {
       console.error(err);
       alert("保存に失敗しました。");
     }
-  };  
+  };
+  
+  
 
   const handleAutoAssign = () => {
-    const requiredStaff = calculateRequiredStaff(dates);
-    let updatedMatrix = applyHopes(shiftMatrix, uniqueEmployeeIds, dates, hopes);
-    updatedMatrix = assignBalancedNightShifts(updatedMatrix, uniqueEmployeeIds, dates, hopes, requiredStaff);
-    
-    Object.keys(updatedMatrix).forEach((key) => {
-      if (!updatedMatrix[key]) {
-        updatedMatrix[key] = "◯";
-      }
+    // 🔥 まず一旦、全シフトを初期化する（保存済みシフトをリセット）
+    const initializedMatrix = {};
+    uniqueEmployeeIds.forEach((empId) => {
+      dates.forEach((date) => {
+        initializedMatrix[`${empId}_${date}`] = "";
+      });
     });
-    
+  
+    // 🔥 休み希望・夜勤希望を最優先で反映
+    let updatedMatrix = applyHopes(initializedMatrix, uniqueEmployeeIds, dates, hopes);
+  
+    // 🔥 夜勤をできるだけ均等に割り振る
+    const requiredStaff = calculateRequiredStaff(dates);
+    updatedMatrix = assignBalancedNightShifts(updatedMatrix, uniqueEmployeeIds, dates, hopes, requiredStaff);
+  
+    // 🔥 残りを日勤・オンコール・遅C・フリーで埋める
+    updatedMatrix = fillShifts(updatedMatrix, uniqueEmployeeIds, dates, requiredStaff);
+  
+    // 🔥 完成したら反映
     setShiftMatrix(updatedMatrix);
+  
     alert("AIによる仮割り当てが完了しました！");
   };
+  
+  
+  
   
     
   
