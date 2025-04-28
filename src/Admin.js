@@ -210,60 +210,57 @@ setStaffList(sortedStaffData);
     fetchData();
   }, [currentMonth]);
 
-  const handleSave = async () => {
-    try {
-      const dataToSave = {};
-      const year = dayjs().year();
-      const monthTitle = `${year}年${currentMonth}月`;
-  
-      uniqueEmployeeIds.forEach((empId) => {
-        dataToSave[empId] = {};
-        dates.forEach((date) => {
-          dataToSave[empId][date] = shiftMatrix[`${empId}_${date}`] || "";
-        });
+  const [saving, setSaving] = useState(false); // 🔥 追加！
+
+const handleSave = async () => {
+  setSaving(true); // 保存開始
+  try {
+    const dataToSave = {};
+    const year = dayjs().year();
+    const monthTitle = `${year}年${currentMonth}月`;
+
+    uniqueEmployeeIds.forEach((empId) => {
+      dataToSave[empId] = {};
+      dates.forEach((date) => {
+        dataToSave[empId][date] = shiftMatrix[`${empId}_${date}`] || "";
       });
-  
-      // ① shiftSchedulesに保存（従来通り）
-      await setDoc(doc(db, "shiftSchedules", monthTitle), dataToSave);
-  
-      // ② shiftsコレクションにも保存（改良版）
-      const batch = writeBatch(db);
-      
-      // 対象月の全日付分を処理
-      uniqueEmployeeIds.forEach((empId) => {
-        dates.forEach((date) => {
-          const type = shiftMatrix[`${empId}_${date}`] || "";
-          
-          // すべての日付に対してドキュメントを作成（空の場合は削除）
+    });
+
+    await setDoc(doc(db, "shiftSchedules", monthTitle), dataToSave);
+
+    const batch = writeBatch(db);
+
+    uniqueEmployeeIds.forEach((empId) => {
+      dates.forEach((date) => {
+        const type = shiftMatrix[`${empId}_${date}`];
+        if (type) {
           const shiftRef = doc(db, "shifts", `${empId}_${date}`);
-          
-          if (type) {
-            // シフトがある場合はデータ作成
-            batch.set(shiftRef, {
-              staffId: empId,
-              date,
-              type,
-              updatedAt: dayjs().toISOString(),
-            });
-          } else {
-            // シフトがない場合は明示的に削除
-            batch.delete(shiftRef);
-          }
-        });
+          batch.set(shiftRef, {
+            staffId: empId,
+            date,
+            type,
+            updatedAt: dayjs().toISOString(),
+          });
+        }
       });
+    });
+
+    await batch.commit();
+
+    alert("✅ シフト保存完了！（反映済み）");
+    fetchData();
+
+  } catch (err) {
+    console.error("保存エラー:", err);
+    alert("❌ 保存失敗：" + err.message);
+  } finally {
+    setSaving(false); // 保存終了
+  }
+};
+
   
-      // バッチ実行（一括で処理）
-      await batch.commit();
   
-      alert("シフトを保存しました！（ホーム画面にも反映）");
   
-      // 保存後に再取得
-      fetchData();
-    } catch (err) {
-      console.error(err);
-      alert("保存に失敗しました。");
-    }
-  };
   
   
 
@@ -389,20 +386,22 @@ setStaffList(sortedStaffData);
   margin: "1rem 0"
 }}>
   <button
-    onClick={handleSave}
-    style={{
-      flex: "1 1 calc(50% - 1rem)",
-      padding: "1rem",
-      backgroundColor: "#4285F4",
-      color: "white",
-      border: "none",
-      borderRadius: "8px",
-      fontSize: "1rem",
-      cursor: "pointer",
-    }}
-  >
-    💾 シフトを保存
-  </button>
+  onClick={handleSave}
+  disabled={saving} // 保存中は押せない！
+  style={{
+    flex: "1 1 calc(50% - 1rem)",
+    padding: "1rem",
+    backgroundColor: saving ? "#bbb" : "#4285F4",
+    color: "white",
+    border: "none",
+    borderRadius: "8px",
+    fontSize: "1rem",
+    cursor: saving ? "not-allowed" : "pointer",
+  }}
+>
+  {saving ? "保存中..." : "💾 シフトを保存"}
+</button>
+
 
   <button
     onClick={handleAutoAssign}
