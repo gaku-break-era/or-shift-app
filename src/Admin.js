@@ -15,7 +15,8 @@ import {
   calculateRequiredStaff, 
   applyHopes, 
   fillShifts, 
-  assignBalancedNightShifts 
+  assignBalancedNightShifts,
+  assignNightShifts 
 } from "./utils/shiftAutoAssign";
 import { writeBatch } from "firebase/firestore"; // ← これ追加！！
 
@@ -68,6 +69,8 @@ const [freeShiftCount, setFreeShiftCount] = useState({});
 
 
   const [currentMonth, setCurrentMonth] = useState(defaultMonth);
+  const [skillData, setSkillData] = useState({});
+
 
   const EMAIL_SERVICE_ID = "service_12m5w0v";
   const EMAIL_TEMPLATE_ID = "template_gmkbnq8";
@@ -176,7 +179,7 @@ setStaffList(sortedStaffData);
         let day = 0, night = 0, oncall = 0, latec = 0, oncallsh = 0, free = 0;
         registeredEmployeeIds.forEach(empId => {
           const value = matrix[`${empId}_${date}`];
-          if (value === "◯") day++;
+          if (value === "◯" || value === "") day++;
           if (value === "/") night++;
           if (value === "□") oncall++;
           if (value === "ｵC") latec++;
@@ -210,51 +213,106 @@ setStaffList(sortedStaffData);
     fetchData();
   }, [currentMonth]);
 
+  useEffect(() => {
+    const fetchSkills = async () => {
+      const skillsSnap = await getDocs(collection(db, "staffSkillSummary")); // 仮想コレクション
+      const skillMap = {};
+      skillsSnap.docs.forEach(doc => {
+        skillMap[doc.id] = doc.data();
+      });
+      setSkillData(skillMap);
+    };
+    fetchSkills();
+  }, []);
+  
+
   const [saving, setSaving] = useState(false); // 🔥 追加！
 
+ // 高度に最適化されたシフト保存関数
+// Admin.jsに組み込んで使用
+
 const handleSave = async () => {
-  setSaving(true); // 保存開始
+  setSaving(true);
   try {
+    console.log("✅ シフト保存開始");
     const dataToSave = {};
     const year = dayjs().year();
     const monthTitle = `${year}年${currentMonth}月`;
-
+    
+    // 新しい保存形式: ◯と空白は保存しない
     uniqueEmployeeIds.forEach((empId) => {
       dataToSave[empId] = {};
       dates.forEach((date) => {
-        dataToSave[empId][date] = shiftMatrix[`${empId}_${date}`] || "";
+        const key = `${empId}_${date}`;
+        const type = shiftMatrix[key] || "";
+        if (type && type !== "◯") {
+          dataToSave[empId][date] = type;
+        }
       });
+      // 全日◯だったら、そのスタッフのデータを削除（Firestoreに無駄データ残さない）
+      if (Object.keys(dataToSave[empId]).length === 0) {
+        delete dataToSave[empId];
+      }
     });
 
+    // shiftSchedules保存
     await setDoc(doc(db, "shiftSchedules", monthTitle), dataToSave);
 
+    // 個別 shifts コレクションも保存
     const batch = writeBatch(db);
-
     uniqueEmployeeIds.forEach((empId) => {
       dates.forEach((date) => {
-        const type = shiftMatrix[`${empId}_${date}`];
-        if (type) {
-          const shiftRef = doc(db, "shifts", `${empId}_${date}`);
+        const key = `${empId}_${date}`;
+        const type = shiftMatrix[key] || "";
+        const shiftRef = doc(db, "shifts", `${empId}_${date}`);
+
+        if (type && type !== "◯") {
           batch.set(shiftRef, {
             staffId: empId,
             date,
             type,
             updatedAt: dayjs().toISOString(),
           });
+        } else {
+          batch.delete(shiftRef);
         }
       });
     });
-
     await batch.commit();
 
-    alert("✅ シフト保存完了！（反映済み）");
-    fetchData();
-
+    alert("✅ 保存完了！（超軽量版）");
+    fetchData(); // 保存後に再読込
   } catch (err) {
-    console.error("保存エラー:", err);
-    alert("❌ 保存失敗：" + err.message);
+    console.error("❌ 保存エラー:", err);
+    alert("保存に失敗しました: " + err.message);
   } finally {
-    setSaving(false); // 保存終了
+    setSaving(false);
+  }
+};
+
+
+// 以下は元のコードに置き換えずに、追加で実装すると良い補助関数
+
+// 待機関数 (async/await で使いやすいようにPromiseでラップ)
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// 指数バックオフつき再試行
+const retryWithBackoff = async (fn, maxRetries = 3, initialDelayMs = 1000) => {
+  let retries = 0;
+  
+  while (true) {
+    try {
+      return await fn();
+    } catch (error) {
+      retries++;
+      
+      if (retries > maxRetries) {
+        throw error;
+      }
+      
+      const delayMs = initialDelayMs * Math.pow(2, retries - 1);
+      await sleep(delayMs);
+    }
   }
 };
 
@@ -264,30 +322,26 @@ const handleSave = async () => {
   
   
 
-  const handleAutoAssign = () => {
-    // 🔥 まず一旦、全シフトを初期化する（保存済みシフトをリセット）
-    const initializedMatrix = {};
-    uniqueEmployeeIds.forEach((empId) => {
-      dates.forEach((date) => {
-        initializedMatrix[`${empId}_${date}`] = "";
-      });
+const handleAutoAssign = () => {
+  // ① 全初期化
+  const initializedMatrix = {};
+  uniqueEmployeeIds.forEach((empId) => {
+    dates.forEach((date) => {
+      initializedMatrix[`${empId}_${date}`] = "";
     });
-  
-    // 🔥 休み希望・夜勤希望を最優先で反映
-    let updatedMatrix = applyHopes(initializedMatrix, uniqueEmployeeIds, dates, hopes);
-  
-    // 🔥 夜勤をできるだけ均等に割り振る
-    const requiredStaff = calculateRequiredStaff(dates);
-    updatedMatrix = assignBalancedNightShifts(updatedMatrix, uniqueEmployeeIds, dates, hopes, requiredStaff);
-  
-    // 🔥 残りを日勤・オンコール・遅C・フリーで埋める
-    updatedMatrix = fillShifts(updatedMatrix, uniqueEmployeeIds, dates, requiredStaff);
-  
-    // 🔥 完成したら反映
-    setShiftMatrix(updatedMatrix);
-  
-    alert("AIによる仮割り当てが完了しました！");
-  };
+  });
+
+  let updatedMatrix = applyHopes(initializedMatrix, uniqueEmployeeIds, dates, hopes);
+updatedMatrix = assignNightShifts(updatedMatrix, uniqueEmployeeIds, dates, skillData, calculateRequiredStaff(dates));
+updatedMatrix = fillShifts(updatedMatrix, uniqueEmployeeIds, dates, calculateRequiredStaff(dates));
+
+
+  // ⑤ 反映
+  setShiftMatrix(updatedMatrix);
+
+  alert("AIによる仮割り当てが完了しました！");
+};
+
   
   
   
@@ -545,7 +599,7 @@ const handleSave = async () => {
                         >
                           {shiftOptions.map((opt) => (
                             <option key={opt} value={opt}>
-                              {opt}
+                              {opt === "" ? "◯" : opt}  {/* ここ！！空白なら「◯」表示 */}
                             </option>
                           ))}
                         </select>

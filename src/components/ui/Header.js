@@ -10,17 +10,14 @@ function Header() {
   const menuItems = [
     { path: "/home", label: "ホーム" },
     { path: "/form", label: "シフト提出" },
-    { path: "/assignments", label: "今週の配置" },
     { path: "/procedures", label: "術式手順書" },
-    { path: "/settings", label: "設定" },
-    { path: "/admin", label: "管理者" },
+    { path: "/settings", label: "スタッフ登録" },
+    { path: "/admin", label: "シフト作成" },
     { path: "/admin-events", label: "イベント登録" },
     { path: "/admin-events-list", label: "イベント一覧" },
-    { path: "/mobile-form", label: "モバイルフォーム" },
-    { path: "/surgery-request", label: "手術申し込み" },
-    { path: "/daily-assignment", label: "日次割り当て" },
-    { path: "/procedure-master", label: "診療科・術式マスター" },
-    { path: "/admin-procedures", label: "個人スキルマスター" },
+    { path: "/surgery-request", label: "手術申込・配置作成" },
+    { path: "/procedure-master", label: "診療科・術式登録" },
+    { path: "/skills", label: "スキルチャート" },
   ];
 
   return (

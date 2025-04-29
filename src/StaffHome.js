@@ -36,10 +36,10 @@ const StaffHome = () => {
     const today = dayjs();
     const dates = Array.from({ length: 7 }, (_, i) => today.add(i - 3, "day"));
     const formatted = dates.map(d => ({
-      label: d.format("dd"), // 曜日
+      label: d.format("dd"),
       date: d.format("YYYY-MM-DD"),
       short: d.format("M/D"),
-      dayOfWeek: d.day() // 0(日)〜6(土)
+      dayOfWeek: d.day()
     }));
     setThisWeekShift(formatted);
     setSelectedDate(today.format("YYYY-MM-DD"));
@@ -51,24 +51,34 @@ const StaffHome = () => {
 
       const today = dayjs();
       const monthDocId = `${today.year()}年${today.month() + 1}月`;
+
       try {
         const shiftDocSnap = await getDoc(doc(db, "shiftSchedules", monthDocId));
-        if (shiftDocSnap.exists()) {
+        const dates = Array.from({ length: 7 }, (_, i) => today.add(i - 3, "day"));
+        const weeklyData = {};
+
+        if (!shiftDocSnap.exists()) {
+          // 🔥 まだシフト作成されてない月なら、全部「ー」
+          dates.forEach(d => {
+            weeklyData[d.format("YYYY-MM-DD")] = "ー";
+          });
+        } else {
+          // 🔥 シフト作成済みならデータ反映
           const shiftData = shiftDocSnap.data();
           const myShiftData = shiftData[myEmployeeId] || {};
-          const weeklyData = {};
-
-          const dates = Array.from({ length: 7 }, (_, i) => today.add(i - 3, "day"));
-          dates.forEach((d) => {
+          dates.forEach(d => {
             const dateStr = d.format("YYYY-MM-DD");
-            weeklyData[dateStr] = myShiftData[dateStr] || "ー";
+            const shiftType = myShiftData[dateStr] || "◯"; // 🔥なければデフォルトは「◯」
+            weeklyData[dateStr] = shiftType;
           });
-          setWeeklyShiftMap(weeklyData);
         }
+
+        setWeeklyShiftMap(weeklyData);
       } catch (err) {
         console.error("今週のシフト取得エラー:", err);
       }
     };
+
     fetchWeeklyShift();
   }, [myEmployeeId]);
 
@@ -81,10 +91,10 @@ const StaffHome = () => {
           .map(doc => ({ id: doc.id, ...doc.data() }))
           .filter(doc => doc.date === selectedDate);
 
-        const myAssigned = selectedDaySurgeries.filter(s => 
-          s.scrub?.id === myEmployeeId || 
-          s.circulating?.id === myEmployeeId || 
-          s.scrubInstructor?.id === myEmployeeId || 
+        const myAssigned = selectedDaySurgeries.filter(s =>
+          s.scrub?.id === myEmployeeId ||
+          s.circulating?.id === myEmployeeId ||
+          s.scrubInstructor?.id === myEmployeeId ||
           s.circulatingInstructor?.id === myEmployeeId
         );
         setMySurgeries(myAssigned);
@@ -102,9 +112,9 @@ const StaffHome = () => {
   };
 
   const getWeekdayColor = (dayOfWeek) => {
-    if (dayOfWeek === 0) return "red";    // 日曜日
-    if (dayOfWeek === 6) return "blue";   // 土曜日
-    return "#333";                        // 平日
+    if (dayOfWeek === 0) return "red";
+    if (dayOfWeek === 6) return "blue";
+    return "#333";
   };
 
   return (

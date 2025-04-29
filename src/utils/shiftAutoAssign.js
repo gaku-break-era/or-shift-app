@@ -1,10 +1,33 @@
 import dayjs from "dayjs";
 
-/**
- * 日ごとに必要な人数を計算する関数
- * @param {Array} dates - 日付の配列
- * @returns {Object} - 日付ごとの必要人数
- */
+/** 配列シャッフルユーティリティ */
+function shuffleArray(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** 夜勤3日セット（/ → X] → 休）を割り当てる */
+export function assignNightSet(updated, candidates, dates, dateIndex) {
+  const date = dates[dateIndex];
+  const nextDate = dates[dateIndex + 1];
+  const nextNextDate = dates[dateIndex + 2];
+  if (!date || !nextDate || !nextNextDate) return null;
+
+  const empId = candidates.shift();
+  if (!empId) return null;
+
+  updated[`${empId}_${date}`] = "/";
+  updated[`${empId}_${nextDate}`] = "X]";
+  updated[`${empId}_${nextNextDate}`] = "休";
+
+  return empId;
+}
+
+/** 日ごとに必要な人数を計算する */
 export function calculateRequiredStaff(dates) {
   const result = {};
 
@@ -29,14 +52,7 @@ export function calculateRequiredStaff(dates) {
   return result;
 }
 
-/**
- * 休み希望・夜勤希望を最優先でシフトに反映する関数
- * @param {Object} shiftMatrix
- * @param {Array} employeeIds
- * @param {Array} dates
- * @param {Object} hopes
- * @returns {Object}
- */
+/** 休み希望・夜勤希望を反映する */
 export function applyHopes(shiftMatrix, employeeIds, dates, hopes) {
   const updated = { ...shiftMatrix };
   const nightAssigned = new Set();
@@ -64,82 +80,47 @@ export function applyHopes(shiftMatrix, employeeIds, dates, hopes) {
   return updated;
 }
 
-/**
- * 夜勤をできるだけ均等に割り振る関数（エラー防止版）
- * @param {Object} shiftMatrix
- * @param {Array} employeeIds
- * @param {Array} dates
- * @param {Object} hopes
- * @param {Object} requiredStaff
- * @returns {Object}
- */
-export function assignBalancedNightShifts(shiftMatrix, employeeIds, dates, hopes, requiredStaff) {
+/** 🧠 新・夜勤割り当てロジック（心外独り立ち → 中堅 → 誰でも） */
+export function assignNightShifts(shiftMatrix, employeeIds, dates, skillData, requiredStaff) {
   const updated = { ...shiftMatrix };
 
-  const nightShiftCountByStaff = {};
-  employeeIds.forEach(empId => {
-    nightShiftCountByStaff[empId] = 0;
-    dates.forEach(date => {
-      if (updated[`${empId}_${date}`] === "/") {
-        nightShiftCountByStaff[empId]++;
-      }
-    });
-  });
-
   dates.forEach((date, i) => {
-    const staffRequirement = requiredStaff?.[date];
-    if (!staffRequirement) {
-      console.warn(`⚠️ 必要人数データがない日をスキップ: ${date}`);
-      return;
-    }
+    const needNight = requiredStaff[date]?.nightShift || 0;
+    if (needNight < 1) return;
 
-    const neededNight = staffRequirement.nightShift || 0;
-    const currentNight = employeeIds.filter(empId => updated[`${empId}_${date}`] === "/").length;
-    const deficit = neededNight - currentNight;
+    const available = employeeIds.filter(empId => !updated[`${empId}_${date}`]);
 
-    if (deficit > 0) {
-      const candidates = employeeIds
-        .filter(empId => {
-          const val = updated[`${empId}_${date}`];
-          return (val === "" || val === "◯") && (hopes[`${empId}_${date}`] || "none") !== "night";
-        })
-        .sort((a, b) => nightShiftCountByStaff[a] - nightShiftCountByStaff[b]);
+    // 1番目：心外器械（combatPower 90以上）
+    const firstCandidates = available.filter(empId => (skillData[empId]?.combatPower || 0) >= 90);
+    if (firstCandidates.length) assignNightSet(updated, firstCandidates, dates, i);
 
-      for (let k = 0; k < deficit && k < candidates.length; k++) {
-        const empId = candidates[k];
-        updated[`${empId}_${date}`] = "/";
-        nightShiftCountByStaff[empId]++;
+    // 2番目：心外外回り（combatPower 85以上）
+    const secondCandidates = available.filter(empId => (skillData[empId]?.combatPower || 0) >= 85);
+    if (secondCandidates.length) assignNightSet(updated, secondCandidates, dates, i);
 
-        const nextDate = dates[i + 1];
-        const nextNextDate = dates[i + 2];
-        if (nextDate && updated[`${empId}_${nextDate}`] === "") {
-          updated[`${empId}_${nextDate}`] = "X]";
-        }
-        if (nextNextDate && updated[`${empId}_${nextNextDate}`] === "") {
-          updated[`${empId}_${nextNextDate}`] = "休";
-        }
-      }
-    }
+    // 3番目：中堅（combatPower 70以上）
+    const thirdCandidates = available.filter(empId => (skillData[empId]?.combatPower || 0) >= 70);
+    if (thirdCandidates.length) assignNightSet(updated, thirdCandidates, dates, i);
+
+    // 4番目：誰でもOK
+    const others = available.filter(empId =>
+      !firstCandidates.includes(empId) &&
+      !secondCandidates.includes(empId) &&
+      !thirdCandidates.includes(empId)
+    );
+    if (others.length) assignNightSet(updated, others, dates, i);
   });
 
   return updated;
 }
 
-/**
- * 必要人数に従って残りを埋める関数
- * @param {Object} shiftMatrix
- * @param {Array} employeeIds
- * @param {Array} dates
- * @param {Object} requiredStaff
- * @returns {Object}
- */
+/** 必要人数に従って、日勤・遅C・オンコールを埋める */
 export function fillShifts(shiftMatrix, employeeIds, dates, requiredStaff) {
   const updated = { ...shiftMatrix };
 
   dates.forEach((date) => {
-    const dayNeed = requiredStaff?.[date] || {};
+    const dayNeed = requiredStaff[date] || {};
     const freeStaff = employeeIds.filter(empId => !updated[`${empId}_${date}`]);
-
     const shuffled = shuffleArray(freeStaff);
 
     for (let i = 0; i < (dayNeed.lateCShift || 0) && shuffled.length; i++) {
@@ -154,16 +135,4 @@ export function fillShifts(shiftMatrix, employeeIds, dates, requiredStaff) {
   });
 
   return updated;
-}
-
-/**
- * 配列をランダムに並び替えるユーティリティ
- */
-function shuffleArray(array) {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
 }

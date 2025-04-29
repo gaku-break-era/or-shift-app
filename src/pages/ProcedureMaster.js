@@ -17,6 +17,9 @@ function ProcedureMaster() {
   const [procedures, setProcedures] = useState([]);
   const [procedureOptions, setProcedureOptions] = useState([]);
 
+  const [selectedDeptId, setSelectedDeptId] = useState("all");
+
+
   const [showDeptModal, setShowDeptModal] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
   const [editingDept, setEditingDept] = useState(null);
@@ -115,22 +118,66 @@ function ProcedureMaster() {
 
       <div className="table-wrapper">
         <table className="master-table">
-          <thead>
-            <tr>
-              <th>診療科名</th>
-            </tr>
-          </thead>
+        <thead>
+  <tr>
+    <th>診療科名</th>
+    <th>操作</th>
+  </tr>
+</thead>
+
           <tbody>
-            {departments.map((dept) => (
-              <tr key={dept.id}>
-                <td>{dept.name}</td>
-              </tr>
-            ))}
-          </tbody>
+  {departments.map((dept) => (
+    <tr key={dept.id}>
+      <td>{dept.name}</td>
+      <td>
+        <button
+          onClick={() => {
+            setEditingDept(dept);
+            setNewDeptName(dept.name);
+            setShowDeptModal(true);
+          }}
+          style={{ marginRight: "0.5rem" }}
+        >
+          編集
+        </button>
+        <button
+          onClick={async () => {
+            if (window.confirm("本当に削除しますか？")) {
+              await deleteDoc(doc(db, "departments", dept.id));
+              const updated = await getDocs(collection(db, "departments"));
+              setDepartments(updated.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+            }
+          }}
+        >
+          削除
+        </button>
+      </td>
+    </tr>
+  ))}
+</tbody>
+
         </table>
       </div>
 
       <h2 className="section-title">🛠 術式マスター</h2>
+
+      <div style={{ margin: "1rem 0" }}>
+  <label>診療科で絞り込み：</label>
+  <select
+    value={selectedDeptId}
+    onChange={(e) => setSelectedDeptId(e.target.value)}
+    style={{ marginLeft: "0.5rem" }}
+  >
+    <option value="all">すべて表示</option>
+    {departments.map((dept) => (
+      <option key={dept.id} value={dept.id}>
+        {dept.name}
+      </option>
+    ))}
+  </select>
+</div>
+
+
       <button className="add-btn" onClick={() => setShowProcModal(true)}>
         ＋ 術式を追加する
       </button>
@@ -145,24 +192,32 @@ function ProcedureMaster() {
             </tr>
           </thead>
           <tbody>
-            {procedures.map((proc) => (
-              <tr key={proc.id}>
-                <td>{proc.name}</td>
-                <td>{departments.find((d) => d.id === proc.departmentId)?.name || "不明"}</td>
-                <td>
-                  <button onClick={() => {
-                    setEditingProc(proc);
-                    setNewProcedure({
-                      name: proc.name,
-                      departmentId: proc.departmentId,
-                      requiredRoles: proc.requiredRoles || [],
-                    });
-                    setShowProcModal(true);
-                  }}>編集</button>
-                  <button onClick={() => handleDeleteProcedure(proc.id)}>削除</button>
-                </td>
-              </tr>
-            ))}
+          {procedures
+  .filter((proc) => selectedDeptId === "all" || proc.departmentId === selectedDeptId)
+  .map((proc) => (
+    <tr key={proc.id}>
+      <td>{proc.name}</td>
+      <td>{departments.find((d) => d.id === proc.departmentId)?.name || "不明"}</td>
+      <td>
+        <button
+          onClick={() => {
+            setEditingProc(proc);
+            setNewProcedure({
+              name: proc.name,
+              departmentId: proc.departmentId,
+              requiredRoles: proc.requiredRoles || [],
+            });
+            setShowProcModal(true);
+          }}
+          style={{ marginRight: "0.5rem" }}
+        >
+          編集
+        </button>
+        <button onClick={() => handleDeleteProcedure(proc.id)}>削除</button>
+      </td>
+    </tr>
+))}
+
           </tbody>
         </table>
       </div>

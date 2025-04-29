@@ -44,6 +44,8 @@ function SkillChart() {
   const [departments, setDepartments] = useState([]);
   const [proceduresByDept, setProceduresByDept] = useState({});
   const [skillsByKey, setSkillsByKey] = useState({});
+  const [activeDept, setActiveDept] = useState("all");
+
 
   const fetchData = async () => {
     const [deptSnap, procSnap, skillSnap, staffSnap] = await Promise.all([
@@ -150,72 +152,110 @@ function SkillChart() {
         </div>
       </div>
 
-      {Object.entries(proceduresByDept).map(([dept, procs], idx) => (
-        <div key={idx} style={{ maxWidth: "800px", margin: "3rem auto" }}>
-          <h3 style={{ textAlign: "center" }}>{dept}</h3>
-          <div style={{ display: "flex", justifyContent: "center", gap: "2rem", flexWrap: "wrap" }}>
-            {["scrub", "circulating"].map(role => (
-              <div key={role} style={{ width: "300px", height: "300px" }}>
-                <Radar
-                  data={{
-                    labels: procs.map(p => p.name),
-                    datasets: [
-                      {
-                        label: `${role === "scrub" ? "器械出し" : "外回り"}（${dept}）`,
-                        data: procs.map(p => statusMap[p[role]] ?? 0),
-                        backgroundColor: "rgba(255,206,86,0.2)",
-                        borderColor: role === "scrub" ? "#36a2eb" : "#ff6384",
-                        borderWidth: 2,
-                      },
-                      {
-                        label: "独り立ちライン",
-                        data: procs.map(() => 6),
-                        borderColor: "rgba(0,200,83,1)",
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        fill: false,
-                      },
-                    ],
-                  }}
-                  options={{ scales: { r: { min: 0, max: 7, ticks: { stepSize: 1 } } } }}
-                />
-              </div>
-            ))}
-          </div>
+      <h3 style={{ textAlign: "center", marginTop: "2rem" }}>表示を切り替え</h3>
+<div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "0.5rem", marginBottom: "2rem" }}>
+  <button
+    onClick={() => setActiveDept("all")}
+    style={{
+      padding: "0.4rem 1rem",
+      backgroundColor: activeDept === "all" ? "#007bff" : "#eee",
+      color: activeDept === "all" ? "#fff" : "#333",
+      border: "none",
+      borderRadius: "5px",
+    }}
+  >
+    全体表示
+  </button>
 
-          <div style={{ marginTop: "1rem" }}>
-            {procs.map((p) => (
-              <div key={p.id} style={{ margin: "1rem 0" }}>
-                <div style={{ fontWeight: "bold" }}>{p.name}</div>
-                {["scrub", "circulating"].map(role => (
-                  <div key={role} style={{ display: "flex", alignItems: "center", margin: "0.25rem 0" }}>
-                    <span style={{ width: "80px" }}>{role === "scrub" ? "器械出し" : "外回り"}</span>
-                    <div style={{ flexGrow: 1, height: "10px", background: "#eee", margin: "0 0.5rem" }}>
-                      <div style={{
-                        width: `${(statusMap[p[role]] / 7) * 100}%`,
-                        background: role === "scrub" ? "#36a2eb" : "#ff6384",
-                        height: "100%",
-                      }} />
-                    </div>
-                    <select
-                      value={p[role]}
-                      onChange={(e) => handleChange(dept, p.id, role, e.target.value)}
-                      style={{ marginLeft: "0.5rem" }}
-                    >
-                      {statusOptions.map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
+  {Object.keys(proceduresByDept).map((dept) => (
+    <button
+      key={dept}
+      onClick={() => setActiveDept(dept)}
+      style={{
+        padding: "0.4rem 1rem",
+        backgroundColor: activeDept === dept ? "#007bff" : "#eee",
+        color: activeDept === dept ? "#fff" : "#333",
+        border: "none",
+        borderRadius: "5px",
+      }}
+    >
+      {dept}
+    </button>
+  ))}
+</div>
+
+
+{Object.entries(proceduresByDept)
+  .filter(([dept]) => activeDept === "all" || dept === activeDept)
+  .map(([dept, procs], idx) => (
+    <div key={idx} style={{ maxWidth: "800px", margin: "3rem auto" }}>
+      {/* ▼ 診療科レーダーチャート2種 */}
+      <h3 style={{ textAlign: "center" }}>{dept}</h3>
+      <div style={{ display: "flex", justifyContent: "center", gap: "2rem", flexWrap: "wrap" }}>
+        {["scrub", "circulating"].map(role => (
+          <div key={role} style={{ width: "300px", height: "300px" }}>
+            <Radar
+              data={{
+                labels: procs.map(p => p.name),
+                datasets: [
+                  {
+                    label: `${role === "scrub" ? "器械出し" : "外回り"}（${dept}）`,
+                    data: procs.map(p => statusMap[p[role]] ?? 0),
+                    backgroundColor: "rgba(255,206,86,0.2)",
+                    borderColor: role === "scrub" ? "#36a2eb" : "#ff6384",
+                    borderWidth: 2,
+                  },
+                  {
+                    label: "独り立ちライン",
+                    data: procs.map(() => 6),
+                    borderColor: "rgba(0,200,83,1)",
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: false,
+                  },
+                ],
+              }}
+              options={{ scales: { r: { min: 0, max: 7, ticks: { stepSize: 1 } } } }}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* ▼ 各術式の進捗セレクト */}
+      <div style={{ marginTop: "1rem" }}>
+        {procs.map((p) => (
+          <div key={p.id} style={{ margin: "1rem 0" }}>
+            <div style={{ fontWeight: "bold" }}>{p.name}</div>
+            {["scrub", "circulating"].map(role => (
+              <div key={role} style={{ display: "flex", alignItems: "center", margin: "0.25rem 0" }}>
+                <span style={{ width: "80px" }}>{role === "scrub" ? "器械出し" : "外回り"}</span>
+                <div style={{ flexGrow: 1, height: "10px", background: "#eee", margin: "0 0.5rem" }}>
+                  <div style={{
+                    width: `${(statusMap[p[role]] / 7) * 100}%`,
+                    background: role === "scrub" ? "#36a2eb" : "#ff6384",
+                    height: "100%",
+                  }} />
+                </div>
+                <select
+                  value={p[role]}
+                  onChange={(e) => handleChange(dept, p.id, role, e.target.value)}
+                  style={{ marginLeft: "0.5rem" }}
+                >
+                  {statusOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
               </div>
             ))}
-            <div style={{ textAlign: "center", marginTop: "1rem" }}>
-              <button className="save-btn" onClick={() => handleSave(dept)}>保存する</button>
-            </div>
           </div>
+        ))}
+        <div style={{ textAlign: "center", marginTop: "1rem" }}>
+          <button className="save-btn" onClick={() => handleSave(dept)}>保存する</button>
         </div>
-      ))}
+      </div>
+    </div>
+))}
+
     </div>
   );
 }
