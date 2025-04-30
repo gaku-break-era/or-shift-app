@@ -16,7 +16,8 @@ import {
   applyHopes, 
   fillShifts, 
   assignBalancedNightShifts,
-  assignNightShifts 
+  assignNightShifts,
+  assignComplexShifts 
 } from "./utils/shiftAutoAssign";
 import { writeBatch } from "firebase/firestore"; // ← これ追加！！
 
@@ -322,8 +323,7 @@ const retryWithBackoff = async (fn, maxRetries = 3, initialDelayMs = 1000) => {
   
   
 
-const handleAutoAssign = () => {
-  // ① 全初期化
+const handleAutoAssign = async () => {
   const initializedMatrix = {};
   uniqueEmployeeIds.forEach((empId) => {
     dates.forEach((date) => {
@@ -332,15 +332,13 @@ const handleAutoAssign = () => {
   });
 
   let updatedMatrix = applyHopes(initializedMatrix, uniqueEmployeeIds, dates, hopes);
-updatedMatrix = assignNightShifts(updatedMatrix, uniqueEmployeeIds, dates, skillData, calculateRequiredStaff(dates));
-updatedMatrix = fillShifts(updatedMatrix, uniqueEmployeeIds, dates, calculateRequiredStaff(dates));
+  updatedMatrix = await assignComplexShifts(updatedMatrix, uniqueEmployeeIds, dates, skillData, calculateRequiredStaff(dates));
+  updatedMatrix = fillShifts(updatedMatrix, uniqueEmployeeIds, dates, calculateRequiredStaff(dates));
 
-
-  // ⑤ 反映
   setShiftMatrix(updatedMatrix);
-
-  alert("AIによる仮割り当てが完了しました！");
+  alert("🤖 AIシフト割り当て完了！");
 };
+
 
   
   

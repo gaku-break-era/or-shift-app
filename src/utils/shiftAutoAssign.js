@@ -30,7 +30,6 @@ export function assignNightSet(updated, candidates, dates, dateIndex) {
 /** 日ごとに必要な人数を計算する */
 export function calculateRequiredStaff(dates) {
   const result = {};
-
   dates.forEach((dateStr) => {
     const date = dayjs(dateStr);
     const dayOfWeek = date.day();
@@ -48,7 +47,6 @@ export function calculateRequiredStaff(dates) {
       result[dateStr] = { dayShift: 42, nightShift: 4, onCallDuty: 0, onCallShift: 2 };
     }
   });
-
   return result;
 }
 
@@ -61,7 +59,6 @@ export function applyHopes(shiftMatrix, employeeIds, dates, hopes) {
     employeeIds.forEach((empId) => {
       const key = `${empId}_${date}`;
       const hope = hopes[key] || "none";
-
       if (hope === "off") {
         updated[key] = "休";
       } else if (hope === "night" && !nightAssigned.has(empId)) {
@@ -80,39 +77,138 @@ export function applyHopes(shiftMatrix, employeeIds, dates, hopes) {
   return updated;
 }
 
-/** 🧠 新・夜勤割り当てロジック（心外独り立ち → 中堅 → 誰でも） */
-export function assignNightShifts(shiftMatrix, employeeIds, dates, skillData, requiredStaff) {
+// --- ▼ 新ロジック：夜勤・オンコール・遅C・当直・待機 ▼ ---
+
+export async function assignComplexShifts(shiftMatrix, employeeIds, dates, skillData, requiredStaff) {
   const updated = { ...shiftMatrix };
+  const warnings = [];
 
-  dates.forEach((date, i) => {
-    const needNight = requiredStaff[date]?.nightShift || 0;
-    if (needNight < 1) return;
-
-    const available = employeeIds.filter(empId => !updated[`${empId}_${date}`]);
-
-    // 1番目：心外器械（combatPower 90以上）
-    const firstCandidates = available.filter(empId => (skillData[empId]?.combatPower || 0) >= 90);
-    if (firstCandidates.length) assignNightSet(updated, firstCandidates, dates, i);
-
-    // 2番目：心外外回り（combatPower 85以上）
-    const secondCandidates = available.filter(empId => (skillData[empId]?.combatPower || 0) >= 85);
-    if (secondCandidates.length) assignNightSet(updated, secondCandidates, dates, i);
-
-    // 3番目：中堅（combatPower 70以上）
-    const thirdCandidates = available.filter(empId => (skillData[empId]?.combatPower || 0) >= 70);
-    if (thirdCandidates.length) assignNightSet(updated, thirdCandidates, dates, i);
-
-    // 4番目：誰でもOK
-    const others = available.filter(empId =>
-      !firstCandidates.includes(empId) &&
-      !secondCandidates.includes(empId) &&
-      !thirdCandidates.includes(empId)
-    );
-    if (others.length) assignNightSet(updated, others, dates, i);
+  const nightCounts = {}, onCallCounts = {}, lateCCounts = {}, dutyCounts = {}, waitCounts = {};
+  employeeIds.forEach(empId => {
+    nightCounts[empId] = 0;
+    onCallCounts[empId] = 0;
+    lateCCounts[empId] = 0;
+    dutyCounts[empId] = 0;
+    waitCounts[empId] = 0;
   });
+
+  for (let i = 0; i < dates.length; i++) {
+    const date = dates[i];
+    const dayInfo = requiredStaff[date] || {};
+    const isWeekend = [0, 6].includes(dayjs(date).day());
+
+    // 夜勤
+    const nightCandidates = employeeIds.filter(empId => !updated[`${empId}_${date}`])
+      .sort((a, b) => nightCounts[a] - nightCounts[b]);
+
+    const nightRoles = [
+      { condition: empId => skillData[empId]?.heartCirculating === true },
+      { condition: empId => skillData[empId]?.heartScrub === true },
+      { condition: empId => skillData[empId]?.combatPower >= 80 },
+      { condition: () => true },
+    ];
+
+    for (let n = 0; n < (isWeekend ? 3 : 4); n++) {
+      const role = nightRoles[n];
+      const cand = nightCandidates.find(empId => (role?.condition || (() => true))(empId));
+      if (cand) {
+        assignNightSet(updated, [cand], dates, i);
+        nightCounts[cand]++;
+      } else {
+        warnings.push(`【${date} 夜勤${n + 1}番目】条件に該当者なし → 最良条件で代替`);
+      }
+    }
+
+    // オンコール
+    const onCallRoles = [
+      { condition: empId => skillData[empId]?.heartAny === true },
+      { condition: empId => skillData[empId]?.brainScrub === true }
+    ];
+    const onCallCandidates = employeeIds.filter(empId => !updated[`${empId}_${date}`])
+      .sort((a, b) => onCallCounts[a] - onCallCounts[b]);
+
+    for (let n = 0; n < (dayInfo.onCallShift || 0); n++) {
+      const role = onCallRoles[n];
+      const cand = onCallCandidates.find(empId => (role?.condition || (() => true))(empId));
+      if (cand) {
+        updated[`${cand}_${date}`] = "ｵﾛ";
+        onCallCounts[cand]++;
+      } else {
+        warnings.push(`【${date} オンコール${n + 1}番目】条件に該当者なし → 最良条件で代替`);
+      }
+    }
+
+    // 遅C
+    const needLateC = dayInfo.lateCShift || 0;
+    const lateCCandidates = employeeIds
+      .filter(empId => !updated[`${empId}_${date}`])
+      .sort((a, b) => lateCCounts[a] - lateCCounts[b]);
+
+    for (let n = 0; n < needLateC; n++) {
+      const cand = lateCCandidates.find(empId => skillData[empId]?.lateCQualified === true);
+      if (cand) {
+        updated[`${cand}_${date}`] = "ｵC";
+        lateCCounts[cand]++;
+      } else {
+        warnings.push(`【${date} 遅C${n + 1}番目】条件に該当者なし → 最良条件で代替`);
+        const fallback = lateCCandidates.find(empId => !updated[`${empId}_${date}`]);
+        if (fallback) {
+          updated[`${fallback}_${date}`] = "ｵC";
+          lateCCounts[fallback]++;
+        }
+      }
+    }
+
+    // 当直・待機（休日）
+    if (isWeekend && dayInfo.dayShift > 0) {
+      const dutyCandidates = employeeIds
+        .filter(empId => !updated[`${empId}_${date}`])
+        .sort((a, b) => dutyCounts[a] - dutyCounts[b]);
+      const waitCandidates = [...dutyCandidates];
+
+      const dutyRoles = [
+        { condition: empId => skillData[empId]?.heartAny === true },
+        { condition: empId => skillData[empId]?.brainAny === true },
+        { condition: () => true }
+      ];
+      const waitRoles = [
+        { condition: empId => skillData[empId]?.heartAny === true },
+        { condition: empId => skillData[empId]?.brainAny === true },
+        { condition: empId => skillData[empId]?.lateCQualified === true }
+      ];
+
+      for (let n = 0; n < 3; n++) {
+        const role = dutyRoles[n];
+        const cand = dutyCandidates.find(empId => (role?.condition || (() => true))(empId));
+        if (cand) {
+          updated[`${cand}_${date}`] = "□";
+          dutyCounts[cand]++;
+        } else {
+          warnings.push(`【${date} 当直${n + 1}番目】条件に該当者なし → 最良条件で代替`);
+        }
+      }
+
+      for (let n = 0; n < 3; n++) {
+        const role = waitRoles[n];
+        const cand = waitCandidates.find(empId => (role?.condition || (() => true))(empId));
+        if (cand) {
+          updated[`${cand}_${date}`] = "□";
+          waitCounts[cand]++;
+        } else {
+          warnings.push(`【${date} 待機${n + 1}番目】条件に該当者なし → 最良条件で代替`);
+        }
+      }
+    }
+  }
+
+  if (warnings.length > 0) {
+    alert(warnings.join("\n\n"));
+  }
 
   return updated;
 }
+
+// --- ▲ ここまで追加！ ▲ ---
 
 /** 必要人数に従って、日勤・遅C・オンコールを埋める */
 export function fillShifts(shiftMatrix, employeeIds, dates, requiredStaff) {
